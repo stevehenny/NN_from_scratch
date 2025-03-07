@@ -16,8 +16,13 @@ int main(int argc, char *argv[]) {
   uint8_t *images = loadMNISTImages(imageFile, numImages, rows, cols);
   // printf("Size of images: %zu\n", sizeof(images));
   uint8_t *labels = loadMNISTLabels(labelFile, numImages);
-  uint32_t *dev_ptr;
-  cudaMalloc((void **)&dev_ptr, sizeof(images));
+  uint8_t *d_images, *d_labels;
+
+  cudaMalloc((void **)&d_images, sizeof(images));
+  cudaMalloc((void **)&d_labels, sizeof(labels));
+  cudaMemcpy(d_images, images, sizeof(images), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_labels, labels, sizeof(labels), cudaMemcpyHostToDevice);
+
   // printf("Size of images: %zu\n", sizeof(labels));
   // Print first image
   printf("Label: %d\n", labels[0]);
