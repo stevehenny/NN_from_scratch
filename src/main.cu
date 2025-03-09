@@ -1,5 +1,8 @@
 #include "LoadData.h"
+#include <cstdint>
 #include <stdio.h>
+
+__global__ void forward(uint8_t *d_images, float **d_weights);
 
 int main(int argc, char *argv[]) {
   if (argc != 3) {
