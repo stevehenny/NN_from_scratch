@@ -2,7 +2,7 @@
 add_library(LoadData STATIC LoadData.cpp)
 
 # Compile the CUDA executable
-add_executable(main main.cu)
+add_executable(main main.cu convLayer.cu)
 
 # Set CUDA compilation properties
 set_target_properties(main PROPERTIES 
@@ -17,9 +17,9 @@ target_link_libraries(main PRIVATE ${CUDAToolkit_LIBRARIES})
 target_include_directories(main PRIVATE ${CUDAToolkit_INCLUDE_DIRS})
 
 # Add NVCC-specific options while ensuring Clangd doesn't see them
-target_compile_options(main PRIVATE 
-  $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
-)
+# target_compile_options(main PRIVATE 
+#   $<$<COMPILE_LANGUAGE:CUDA>:--expt-relaxed-constexpr>
+# )
 
 # Link LoadData library
 target_link_libraries(main PRIVATE LoadData)
