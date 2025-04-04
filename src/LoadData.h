@@ -16,6 +16,6 @@ uint8_t *loadMNISTImages(const char *filename, int numImages, int rows,
 uint8_t *loadMNISTLabels(const char *filename, int numLabels);
 
 // prints image in ASCII
-void printImage(uint8_t *image, int rows, int cols);
+void printImage(float *image, int rows, int cols);
 
 #endif // !LOAD_DATA_H

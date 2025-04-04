@@ -4,22 +4,29 @@
 
 #define KERNEL_SIZE 3
 #define IMAGE_SIZE 28
+#define BLOCK_SIZE 16
+
+struct ImageSize {
+  int width;
+  int height;
+  ImageSize(int width, int height) : width(width), height(height) {}
+};
 __global__ void conv_forward_kernel();
 class convLayer {
 
 public:
-  convLayer(uint8_t *kernels, uint8_t input_channels, uint8_t output_channels,
-            uint16_t height, uint16_t width);
+  convLayer(ImageSize inputImageSize, ImageSize outputImageSize,
+            ImageSize kernelSize, float *kernels, uint8_t input_channels,
+            uint8_t output_channels);
   ~convLayer();
-  void forward(uint8_t *input_image, uint8_t *output_image);
+  void forward(float *input_image, float *output_image);
 
 private:
-  uint8_t *d_kernels;
-  uint8_t *kernels;
+  int HA, WA, HB, WB, HC, WC; // A - input, B - output, C - kernel
+  float *d_kernels;
+  float *kernels;
   uint8_t input_channels;
   uint8_t output_channels;
-  uint16_t height;
-  uint16_t width;
   uint8_t depth;
 };
 
