@@ -50,3 +50,12 @@ void printImage(float *image, int rows, int cols) {
     printf("\n");
   }
 }
+
+void printImageValues(float *image, int rows, int cols) {
+  for (int i = 0; i < rows; i++) {
+    for (int j = 0; j < cols; j++) {
+      printf("%.2f, ", image[i * cols + j]);
+    }
+    printf("\n");
+  }
+}

@@ -18,4 +18,6 @@ uint8_t *loadMNISTLabels(const char *filename, int numLabels);
 // prints image in ASCII
 void printImage(float *image, int rows, int cols);
 
+void printImageValues(float *image, int rows, int cols);
+
 #endif // !LOAD_DATA_H

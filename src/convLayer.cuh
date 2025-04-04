@@ -11,7 +11,6 @@ struct ImageSize {
   int height;
   ImageSize(int width, int height) : width(width), height(height) {}
 };
-__global__ void conv_forward_kernel();
 class convLayer {
 
 public:
