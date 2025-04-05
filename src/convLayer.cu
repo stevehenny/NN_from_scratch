@@ -12,7 +12,7 @@ __global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
   int row_i = row - WC + 1;
   int col_i = col - WC + 1;
 
-  float tmp = 0.0f;
+  float tmp = 0.0;
 
   // Declare shared memory for a tile of A
   __shared__ float shm[BLOCK_SIZE][BLOCK_SIZE];
@@ -36,7 +36,6 @@ __global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
     B[col * WB + row] = tmp;
   }
 }
-
 __global__ void Convolution_3d(float *A, float *B, float *C, int HA, int WA,
                                int HB, int WB, int HC, int WC,
                                int input_channels, int output_channels) {
@@ -133,4 +132,5 @@ void convLayer::forward(float *input_image, float *output_image) {
 
   cudaCheck(cudaFree(d_input_image));
   cudaCheck(cudaFree(d_output_image));
+  int x = 0;
 }

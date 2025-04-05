@@ -2,7 +2,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 
-
 def load_and_plot(input_file, output_file, output_channels):
     # Load the binary files
     input_data = np.fromfile(input_file, dtype=np.float32)
