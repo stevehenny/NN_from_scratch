@@ -57,19 +57,17 @@ __global__ void Convolution_3d(float *A, float *B, float *C, int HA, int WA,
     float *kernel = C + (out_channel * input_channels + in_channel) * WC * HC;
 
     if (row_i >= 0 && col_i >= 0 && row_i < HA && col_i < WA) {
-      shm[threadIdx.y][threadIdx.x] = input[col_i * WA + row_i];
+      shm[threadIdx.y][threadIdx.x] = input[row_i * WA + col_i];
     } else {
       shm[threadIdx.y][threadIdx.x] = 0.0f;
     }
 
     __syncthreads();
 
-    if (threadIdx.y < (BLOCK_SIZE - WC + 1) &&
-        threadIdx.x < (BLOCK_SIZE - WC + 1) && row < (HB - WC + 1) &&
-        col < (WB - WC + 1)) {
+    if (row < HB && col < WB) {
       for (int i = 0; i < WC; i++) {
         for (int j = 0; j < HC; j++) {
-          tmp += shm[threadIdx.y + i][threadIdx.x + j] * kernel[j * WC + i];
+          tmp += shm[threadIdx.y + i][threadIdx.x + j] * kernel[i * WC + j];
         }
       }
     }
@@ -77,9 +75,8 @@ __global__ void Convolution_3d(float *A, float *B, float *C, int HA, int WA,
   }
 
   // Write to output buffer
-  if (threadIdx.y < (BLOCK_SIZE - WC + 1) &&
-      threadIdx.x < (BLOCK_SIZE - WC + 1) && row < HB && col < WB) {
-    B[out_channel * HB * WB + col * WB + row] = tmp;
+  if (row < HB && col < WB) {
+    B[out_channel * HB * WB + row * WB + col] = tmp;
   }
 }
 
@@ -113,8 +110,9 @@ void convLayer::forward(float *input_image, float *output_image) {
 
   dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
 
-  dim3 grid((WB + BLOCK_SIZE - 1) / BLOCK_SIZE,
-            (HB + BLOCK_SIZE - 1) / BLOCK_SIZE, output_channels);
+  int tile_output_size = BLOCK_SIZE - WC + 1;
+  dim3 grid((WB + tile_output_size - 1) / tile_output_size,
+            (HB + tile_output_size - 1) / tile_output_size, output_channels);
 
   Convolution_3d<<<grid, threads>>>(d_input_image, d_output_image, d_kernels,
                                     HA, WA, HB, WB, HC, WC, input_channels,
