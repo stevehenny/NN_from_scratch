@@ -112,8 +112,9 @@ void convLayer::forward(float *input_image, float *output_image) {
                        cudaMemcpyHostToDevice));
 
   dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
-  dim3 grid((WB - 1) / (BLOCK_SIZE - WC + 1), (WB - 1) / (BLOCK_SIZE - WC + 1),
-            output_channels);
+
+  dim3 grid((WB + BLOCK_SIZE - 1) / BLOCK_SIZE,
+            (HB + BLOCK_SIZE - 1) / BLOCK_SIZE, output_channels);
 
   Convolution_3d<<<grid, threads>>>(d_input_image, d_output_image, d_kernels,
                                     HA, WA, HB, WB, HC, WC, input_channels,
@@ -132,5 +133,4 @@ void convLayer::forward(float *input_image, float *output_image) {
 
   cudaCheck(cudaFree(d_input_image));
   cudaCheck(cudaFree(d_output_image));
-  int x = 0;
 }

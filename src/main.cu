@@ -62,7 +62,8 @@ int main(int argc, char *argv[]) {
       for (int i = 0; i < kernel_size * kernel_size; ++i) {
         // Different patterns for each output channel
         kernels[((oc * input_channels + ic) * kernel_size * kernel_size) + i] =
-            ((i + oc) % 2 == 0) ? randomFloat(-1.0f, 1.0f) : 0;
+            ((i + oc) % 2 == 0) ? randomFloat(0.0f, 1.0f)
+                                : randomFloat(-1.0, 0);
       }
     }
   }

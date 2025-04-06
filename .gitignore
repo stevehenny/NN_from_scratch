@@ -2,3 +2,4 @@ src/main
 .cache/
 build/
 .venv/
+*.png
