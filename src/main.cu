@@ -3,11 +3,17 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <random>
 
-float randomFloat(float min, float max) {
-  return min + ((float)rand() / RAND_MAX) * (max - min);
+#define INPUT_IMAGE_ROWS 28
+#define INPUT_IMAGE_COLS 28
+#define IMAGE_NUMBER(ptr, num)                                                 \
+  (return ((uint8_t *)&ptr[0] + (INPUT_IMAGE_ROWS * INPUT_IMAGE_COLS * num)))
+
+float *getInputImage(float *images, int imageNum) {
+
+  return (&images[0] + (INPUT_IMAGE_COLS * INPUT_IMAGE_ROWS * imageNum));
 }
-
 void saveToFile(const float *data, size_t size, const char *filename) {
   FILE *file = fopen(filename, "wb");
   if (file) {
@@ -54,16 +60,20 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // Allocate kernels for all output channels
+  // Random number generator setup
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<float> pos_dist(0.0f, 1.0f);
+  std::uniform_real_distribution<float> neg_dist(-1.0f, 0.0f);
+
+  // Allocate and initialize kernels with actual randomness
   float *kernels = (float *)malloc(output_channels * input_channels *
                                    kernel_size * kernel_size * sizeof(float));
   for (int oc = 0; oc < output_channels; ++oc) {
     for (int ic = 0; ic < input_channels; ++ic) {
       for (int i = 0; i < kernel_size * kernel_size; ++i) {
-        // Different patterns for each output channel
         kernels[((oc * input_channels + ic) * kernel_size * kernel_size) + i] =
-            ((i + oc) % 2 == 0) ? randomFloat(0.0f, 1.0f)
-                                : randomFloat(-1.0, 0);
+            ((i + oc) % 2 == 0) ? pos_dist(gen) : neg_dist(gen);
       }
     }
   }
@@ -75,7 +85,7 @@ int main(int argc, char *argv[]) {
                 output_channels);
 
   // Prepare input and output buffers
-  float *input_image = &normalized_images[0];
+  float *input_image = getInputImage(normalized_images, 3);
   float *output_image = (float *)malloc(
       output_channels * output_size_per_channel * sizeof(float));
 

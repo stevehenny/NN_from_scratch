@@ -4,7 +4,7 @@
 
 #define KERNEL_SIZE 3
 #define IMAGE_SIZE 28
-#define BLOCK_SIZE 16
+#define BLOCK_SIZE 32
 
 struct ImageSize {
   int width;

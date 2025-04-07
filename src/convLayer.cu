@@ -1,89 +1,10 @@
 #include "CudaChecks.cuh"
 #include "convLayer.cuh"
+#include "cudaKernels.cuh"
 #include <cstdint>
 #include <iostream>
 #include <stdexcept>
-
 #define SHARED_BLOCK_SIZE BLOCK_SIZE + 2
-__global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
-                            int HB, int WB, int HC, int WC, int input_channels,
-                            int output_channels) {
-  int col = blockIdx.x * (BLOCK_SIZE - WC + 1) + threadIdx.x;
-  int row = blockIdx.y * (BLOCK_SIZE - WC + 1) + threadIdx.y;
-  int row_i = row - WC + 1;
-  int col_i = col - WC + 1;
-
-  float tmp = 0.0;
-
-  // Declare shared memory for a tile of A
-  __shared__ float shm[BLOCK_SIZE][BLOCK_SIZE];
-
-  if (row_i < WA && row_i >= 0 && col_i < WA && col_i >= 0) {
-    shm[threadIdx.y][threadIdx.x] = A[col_i * WA + row_i];
-  } else {
-    shm[threadIdx.y][threadIdx.x] = 0.0f;
-  }
-
-  __syncthreads();
-
-  if (threadIdx.y < (BLOCK_SIZE - WC + 1) &&
-      threadIdx.x < (BLOCK_SIZE - WC + 1) && row < (WB - WC + 1) &&
-      col < (WB - WC + 1)) {
-    for (int i = 0; i < WC; i++) {
-      for (int j = 0; j < WC; j++) {
-        tmp += shm[threadIdx.y + i][threadIdx.x + j] * C[j * WC + i];
-      }
-    }
-    B[col * WB + row] = tmp;
-  }
-}
-
-__global__ void Convolution_3d(float *A, float *B, float *C, int HA, int WA,
-                               int HB, int WB, int HC, int WC,
-                               int input_channels, int output_channels) {
-  int out_channel = blockIdx.z;
-
-  // Global output location (row, col) this thread is responsible for
-  int out_col = blockIdx.x * (BLOCK_SIZE - WC + 1) + threadIdx.x;
-  int out_row = blockIdx.y * (BLOCK_SIZE - HC + 1) + threadIdx.y;
-
-  __shared__ float shm[SHARED_BLOCK_SIZE][SHARED_BLOCK_SIZE];
-
-  float tmp = 0.0f;
-
-  for (int in_channel = 0; in_channel < input_channels; ++in_channel) {
-    float *input = A + in_channel * HA * WA;
-    float *kernel = C + (out_channel * input_channels + in_channel) * HC * WC;
-
-    // Global input coordinates this thread will load into shared memory
-    int in_col = blockIdx.x * (BLOCK_SIZE - WC + 1) + threadIdx.x;
-    int in_row = blockIdx.y * (BLOCK_SIZE - HC + 1) + threadIdx.y;
-
-    if (in_row < HA && in_col < WA && in_row >= 0 && in_col >= 0) {
-      shm[threadIdx.y][threadIdx.x] = input[in_row * WA + in_col];
-    } else {
-      shm[threadIdx.y][threadIdx.x] = 0.0f;
-    }
-
-    __syncthreads();
-
-    // Compute output only from threads assigned to compute one pixel
-    if (threadIdx.y < (BLOCK_SIZE - HC + 1) &&
-        threadIdx.x < (BLOCK_SIZE - WC + 1) && out_row < HB && out_col < WB) {
-
-      for (int i = 0; i < HC; ++i) {
-        for (int j = 0; j < WC; ++j) {
-          tmp += shm[threadIdx.y + i][threadIdx.x + j] * kernel[i * WC + j];
-        }
-      }
-
-      B[out_channel * HB * WB + out_row * WB + out_col] = tmp;
-    }
-
-    __syncthreads(); // Sync before next input channel
-  }
-}
-
 convLayer::convLayer(ImageSize inputImageSize, ImageSize outputImageSize,
                      ImageSize kernelSize, float *kernels,
                      uint8_t input_channels, uint8_t output_channels)
@@ -118,9 +39,9 @@ void convLayer::forward(float *input_image, float *output_image) {
   dim3 grid((WB + tile_output_size - 1) / tile_output_size,
             (HB + tile_output_size - 1) / tile_output_size, output_channels);
 
-  Convolution_3d<<<grid, threads>>>(d_input_image, d_output_image, d_kernels,
-                                    HA, WA, HB, WB, HC, WC, input_channels,
-                                    output_channels);
+  Convolution3D<<<grid, threads>>>(d_input_image, d_output_image, d_kernels, HA,
+                                   WA, HB, WB, HC, WC, input_channels,
+                                   output_channels);
 
   cudaError_t error = cudaGetLastError();
   if (error != cudaSuccess) {
