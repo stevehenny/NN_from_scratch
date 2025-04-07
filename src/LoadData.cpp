@@ -42,10 +42,19 @@ uint8_t *loadMNISTLabels(const char *filename, int numLables) {
   return readIDXFile(filename, IDX_LABEL_HEADER_SIZE, numLables);
 }
 
-void printImage(uint8_t *image, int rows, int cols) {
+void printImage(float *image, int rows, int cols) {
   for (int i = 0; i < rows; i++) {
     for (int j = 0; j < cols; j++) {
-      printf("%c", image[i * cols + j] > 128 ? '#' : ' ');
+      printf("%c", image[i * cols + j] > 0 ? '#' : ' ');
+    }
+    printf("\n");
+  }
+}
+
+void printImageValues(float *image, int rows, int cols) {
+  for (int i = 0; i < rows; i++) {
+    for (int j = 0; j < cols; j++) {
+      printf("%.2f, ", image[i * cols + j]);
     }
     printf("\n");
   }

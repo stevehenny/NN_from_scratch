@@ -1,54 +1,119 @@
 #include "LoadData.h"
 #include "convLayer.cuh"
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
-#include <stdio.h>
-__global__ void forward(uint8_t *d_images, float **d_weights);
+#include <random>
+
+#define INPUT_IMAGE_ROWS 28
+#define INPUT_IMAGE_COLS 28
+#define IMAGE_NUMBER(ptr, num)                                                 \
+  (return ((uint8_t *)&ptr[0] + (INPUT_IMAGE_ROWS * INPUT_IMAGE_COLS * num)))
+
+float *getInputImage(float *images, int imageNum) {
+
+  return (&images[0] + (INPUT_IMAGE_COLS * INPUT_IMAGE_ROWS * imageNum));
+}
+void saveToFile(const float *data, size_t size, const char *filename) {
+  FILE *file = fopen(filename, "wb");
+  if (file) {
+    fwrite(data, sizeof(float), size, file);
+    fclose(file);
+  } else {
+    printf("Error saving to file %s\n", filename);
+  }
+}
 
 int main(int argc, char *argv[]) {
   if (argc != 3) {
-    fprintf(stderr, "Usage: <imageFile> <labels>");
+    fprintf(stderr, "Usage: <imageFile> <labelFile>\n");
     return 1;
   }
 
   const char *imageFile = argv[1];
   const char *labelFile = argv[2];
 
-  int numImages = 60000;
-  int rows = 28, cols = 28;
+  const int numImages = 60000;
+  const int rows = 28, cols = 28;
+  const int imageSize = rows * cols;
 
+  // Convolution setup
+  const int kernel_size = KERNEL_SIZE; // usually 3
+  const int input_channels = 1;
+  const int output_channels = 16;
+  const int out_rows = rows - (kernel_size - 1);
+  const int out_cols = cols - (kernel_size - 1);
+  const int output_size_per_channel = out_rows * out_cols;
+
+  // Load MNIST
   uint8_t *images = loadMNISTImages(imageFile, numImages, rows, cols);
-  // printf("Size of images: %zu\n", sizeof(images));
   uint8_t *labels = loadMNISTLabels(labelFile, numImages);
-  uint8_t *d_images, *d_labels;
-  uint8_t *kernels = (uint8_t *)malloc(KERNEL_SIZE * KERNEL_SIZE);
-  for (int i = 0; i < 9; ++i) {
-    if ((i & 1) == 0) {
-      kernels[i] = 1;
-    } else {
-      kernels[i] = 0;
+
+  // Normalize images to float in range [-1.0, 1.0]
+  float *normalized_images =
+      (float *)malloc(numImages * imageSize * sizeof(float));
+  for (int img = 0; img < numImages; ++img) {
+    for (int i = 0; i < imageSize; ++i) {
+      uint8_t pixel = images[img * imageSize + i];
+      normalized_images[img * imageSize + i] =
+          ((float)pixel / 255.0f) * 2.0f - 1.0f;
     }
   }
-  convLayer layer1 = convLayer(kernels, 1, 1, 28, 28);
-  uint8_t *input_image = &images[0];
-  uint8_t *output_image =
-      (uint8_t *)malloc((28 - (KERNEL_SIZE - 1)) * (28 - (KERNEL_SIZE - 1)));
-  layer1.forward(input_image, output_image);
-  // layer1.forward(uint8_t *input_image, uint8_t *output_image)
-  // cudaMalloc((void **)&d_images, sizeof(images));
-  // cudaMalloc((void **)&d_labels, sizeof(labels));
-  // cudaMemcpy(d_images, images, sizeof(images), cudaMemcpyHostToDevice);
-  // cudaMemcpy(d_labels, labels, sizeof(labels), cudaMemcpyHostToDevice);
 
-  // printf("Size of images: %zu\n", sizeof(labels));
-  // Print first image
+  // Random number generator setup
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<float> pos_dist(0.0f, 1.0f);
+  std::uniform_real_distribution<float> neg_dist(-1.0f, 0.0f);
+
+  // Allocate and initialize kernels with actual randomness
+  float *kernels = (float *)malloc(output_channels * input_channels *
+                                   kernel_size * kernel_size * sizeof(float));
+  for (int oc = 0; oc < output_channels; ++oc) {
+    for (int ic = 0; ic < input_channels; ++ic) {
+      for (int i = 0; i < kernel_size * kernel_size; ++i) {
+        kernels[((oc * input_channels + ic) * kernel_size * kernel_size) + i] =
+            ((i + oc) % 2 == 0) ? pos_dist(gen) : neg_dist(gen);
+      }
+    }
+  }
+
+  // Initialize conv layer
+  convLayer layer1 =
+      convLayer(ImageSize(rows, cols), ImageSize(out_rows, out_cols),
+                ImageSize(kernel_size, kernel_size), kernels, input_channels,
+                output_channels);
+
+  // Prepare input and output buffers
+  float *input_image = getInputImage(normalized_images, 3);
+  float *output_image = (float *)malloc(
+      output_channels * output_size_per_channel * sizeof(float));
+
+  // Run forward pass
+  layer1.forward(input_image, output_image);
+
+  // Save the input image to a binary file
+  saveToFile(input_image, imageSize, "input_bin");
+
+  // Save the output image to a binary file
+  saveToFile(output_image, output_channels * output_size_per_channel,
+             "output_bin");
+
+  // Print results
   printf("Label: %d\n", labels[0]);
   printImage(input_image, rows, cols);
-  printImage(output_image, rows, cols);
 
-  // Free allocated memory
+  for (int oc = 0; oc < output_channels; ++oc) {
+    printf("=== Output Channel %d ===\n", oc);
+    printImage(&output_image[oc * output_size_per_channel], out_rows, out_cols);
+  }
+
+  // Cleanup
   free(images);
   free(labels);
+  free(normalized_images);
+  free(kernels);
   free(output_image);
+
   return 0;
 }
