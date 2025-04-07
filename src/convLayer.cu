@@ -4,6 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 
+#define SHARED_BLOCK_SIZE BLOCK_SIZE + 2
 __global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
                             int HB, int WB, int HC, int WC, int input_channels,
                             int output_channels) {
@@ -36,47 +37,50 @@ __global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
     B[col * WB + row] = tmp;
   }
 }
+
 __global__ void Convolution_3d(float *A, float *B, float *C, int HA, int WA,
                                int HB, int WB, int HC, int WC,
                                int input_channels, int output_channels) {
-
-  int col = blockIdx.x * (BLOCK_SIZE - WC + 1) + threadIdx.x;
-  int row = blockIdx.y * (BLOCK_SIZE - WC + 1) + threadIdx.y;
   int out_channel = blockIdx.z;
 
-  int row_i = row - WC + 1;
-  int col_i = col - WC + 1;
+  // Global output location (row, col) this thread is responsible for
+  int out_col = blockIdx.x * (BLOCK_SIZE - WC + 1) + threadIdx.x;
+  int out_row = blockIdx.y * (BLOCK_SIZE - HC + 1) + threadIdx.y;
+
+  __shared__ float shm[SHARED_BLOCK_SIZE][SHARED_BLOCK_SIZE];
 
   float tmp = 0.0f;
 
-  __shared__ float shm[BLOCK_SIZE][BLOCK_SIZE];
-
   for (int in_channel = 0; in_channel < input_channels; ++in_channel) {
-    // Offset pointers for current input channel
     float *input = A + in_channel * HA * WA;
-    float *kernel = C + (out_channel * input_channels + in_channel) * WC * HC;
+    float *kernel = C + (out_channel * input_channels + in_channel) * HC * WC;
 
-    if (row_i >= 0 && col_i >= 0 && row_i < HA && col_i < WA) {
-      shm[threadIdx.y][threadIdx.x] = input[row_i * WA + col_i];
+    // Global input coordinates this thread will load into shared memory
+    int in_col = blockIdx.x * (BLOCK_SIZE - WC + 1) + threadIdx.x;
+    int in_row = blockIdx.y * (BLOCK_SIZE - HC + 1) + threadIdx.y;
+
+    if (in_row < HA && in_col < WA && in_row >= 0 && in_col >= 0) {
+      shm[threadIdx.y][threadIdx.x] = input[in_row * WA + in_col];
     } else {
       shm[threadIdx.y][threadIdx.x] = 0.0f;
     }
 
     __syncthreads();
 
-    if (row < HB && col < WB) {
-      for (int i = 0; i < WC; i++) {
-        for (int j = 0; j < HC; j++) {
+    // Compute output only from threads assigned to compute one pixel
+    if (threadIdx.y < (BLOCK_SIZE - HC + 1) &&
+        threadIdx.x < (BLOCK_SIZE - WC + 1) && out_row < HB && out_col < WB) {
+
+      for (int i = 0; i < HC; ++i) {
+        for (int j = 0; j < WC; ++j) {
           tmp += shm[threadIdx.y + i][threadIdx.x + j] * kernel[i * WC + j];
         }
       }
-    }
-    __syncthreads();
-  }
 
-  // Write to output buffer
-  if (row < HB && col < WB) {
-    B[out_channel * HB * WB + row * WB + col] = tmp;
+      B[out_channel * HB * WB + out_row * WB + out_col] = tmp;
+    }
+
+    __syncthreads(); // Sync before next input channel
   }
 }
 
