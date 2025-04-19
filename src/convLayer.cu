@@ -22,16 +22,7 @@ convLayer::convLayer(ImageSize inputImageSize, ImageSize outputImageSize,
 
 convLayer::~convLayer() { cudaFree(d_kernels); }
 
-void convLayer::forward(float *input_image, float *output_image) {
-  float *d_input_image;
-  float *d_output_image;
-  cudaCheck(cudaMalloc((void **)&d_input_image,
-                       input_channels * WA * HA * sizeof(float)));
-  cudaCheck(cudaMalloc((void **)&d_output_image,
-                       output_channels * WB * HB * sizeof(float)));
-  cudaCheck(cudaMemcpy(d_input_image, input_image,
-                       input_channels * WA * HA * sizeof(float),
-                       cudaMemcpyHostToDevice));
+void convLayer::forward(float *d_input_image, float *d_output_image) {
 
   dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
 
@@ -50,10 +41,4 @@ void convLayer::forward(float *input_image, float *output_image) {
   }
 
   cudaCheck(cudaDeviceSynchronize());
-  cudaCheck(cudaMemcpy(output_image, d_output_image,
-                       output_channels * WB * HB * sizeof(float),
-                       cudaMemcpyDeviceToHost));
-
-  cudaCheck(cudaFree(d_input_image));
-  cudaCheck(cudaFree(d_output_image));
 }

@@ -77,7 +77,7 @@ __global__ void Convolution3D(float *A, float *B, float *C, int HA, int WA,
       B[out_channel * HB * WB + out_row * WB + out_col] = tmp;
     }
 
-    __syncthreads(); // Sync before next input channel
+    __syncthreads();
   }
 }
 
@@ -90,7 +90,25 @@ __global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
   int input_channel = blockIdx.z;
   __shared__ float shm[BLOCK_SIZE][BLOCK_SIZE];
 
-  if (in_row < HA && in_col < WA && in_row >= 0 && in_col >= 0) {
+  // populate shared memory
+  for (int i = in_row; i <= in_row + 1; ++i) {
+    for (int j = in_col; j <= in_col + 1; ++j) {
+      shm[(i + in_row) - in_row][(j + in_col) - in_col] =
+          A[input_channel * WA * HA + i * WA + j];
+    }
   }
   __syncthreads();
+
+  // Take the max of the data and write to B
+  float temp = -1000.0f;
+  float cur;
+  for (int i = in_row; i <= in_row + 1; ++i) {
+    for (int j = in_col; j <= in_col + 1; ++j) {
+      cur = shm[(i + in_row) - in_row][(j + in_col) - in_col];
+      if (temp < cur)
+        temp = cur;
+    }
+  }
+  __syncthreads();
+  B[input_channel * WB * HB + out_row * WB + out_col] = temp;
 }
