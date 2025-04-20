@@ -85,30 +85,26 @@ __global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
                           int input_channels) {
   int out_col = blockIdx.x * blockDim.x + threadIdx.x;
   int out_row = blockIdx.y * blockDim.y + threadIdx.y;
-  int in_col = out_col * 2;
-  int in_row = out_row * 2;
   int input_channel = blockIdx.z;
-  __shared__ float shm[BLOCK_SIZE][BLOCK_SIZE];
 
-  // populate shared memory
-  for (int i = in_row; i <= in_row + 1; ++i) {
-    for (int j = in_col; j <= in_col + 1; ++j) {
-      shm[(i + in_row) - in_row][(j + in_col) - in_col] =
-          A[input_channel * WA * HA + i * WA + j];
-    }
-  }
-  __syncthreads();
+  if (out_row >= HB || out_col >= WB)
+    return; // bounds check
 
-  // Take the max of the data and write to B
+  int in_row = out_row * 2;
+  int in_col = out_col * 2;
+
   float temp = -1000.0f;
-  float cur;
-  for (int i = in_row; i <= in_row + 1; ++i) {
-    for (int j = in_col; j <= in_col + 1; ++j) {
-      cur = shm[(i + in_row) - in_row][(j + in_col) - in_col];
-      if (temp < cur)
-        temp = cur;
+
+  // 2x2 pooling window
+  for (int i = 0; i < 2; ++i) {
+    for (int j = 0; j < 2; ++j) {
+      int r = in_row + i;
+      int c = in_col + j;
+      float val = A[input_channel * HA * WA + r * WA + c];
+      if (val > temp)
+        temp = val;
     }
   }
-  __syncthreads();
-  B[input_channel * WB * HB + out_row * WB + out_col] = temp;
+
+  B[input_channel * HB * WB + out_row * WB + out_col] = temp;
 }
