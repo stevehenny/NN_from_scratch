@@ -1,7 +1,7 @@
 #include "CudaChecks.cuh"
 #include "cudaKernels.cuh"
 #include "maxPool.cuh"
-#define POOL_BLOCK_SIZE 16.0
+#define POOL_BLOCK_SIZE 16
 maxPool::maxPool(int HA, int WA, int HB, int WB, int input_channels)
     : HA(HA), WA(WA), HB(HB), WB(WB), input_channels(input_channels) {}
 

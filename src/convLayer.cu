@@ -25,10 +25,9 @@ convLayer::~convLayer() { cudaFree(d_kernels); }
 void convLayer::forward(float *d_input_image, float *d_output_image) {
 
   dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
-
-  int tile_output_size = BLOCK_SIZE - WC + 1;
-  dim3 grid((WB + tile_output_size - 1) / tile_output_size,
-            (HB + tile_output_size - 1) / tile_output_size, output_channels);
+  int grid_x = (WB + BLOCK_SIZE - 1) / BLOCK_SIZE;
+  int grid_y = (HB + BLOCK_SIZE - 1) / BLOCK_SIZE;
+  dim3 grid(grid_x, grid_y, output_channels);
 
   Convolution3D<<<grid, threads>>>(d_input_image, d_output_image, d_kernels, HA,
                                    WA, HB, WB, HC, WC, input_channels,

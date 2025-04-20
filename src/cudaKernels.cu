@@ -1,5 +1,4 @@
 #include "cudaKernels.cuh"
-#define BLOCK_SIZE 32
 #define SHARED_BLOCK_SIZE BLOCK_SIZE + 2
 
 __global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
@@ -120,5 +119,74 @@ __global__ void ReLU_kernel(float *B, int HB, int WB, int channels) {
 
   if (B[row * WB + col + input_channel * WB * HB] < 0) {
     B[row * WB + col + input_channel * WB * HB] = 0;
+  }
+}
+
+// sgemm stands for single precision general matrix-matrix multiply
+__global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
+                      int WB, int HC, int WC) {
+  //@@ Insert code to implement matrix multiplication here
+  //@@ You have to use shared memory for this lab
+  __shared__ float ds_A[BLOCK_SIZE][BLOCK_SIZE];
+  __shared__ float ds_B[BLOCK_SIZE][BLOCK_SIZE];
+
+  // Calculate thread indexes
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int Col = blockIdx.x * BLOCK_SIZE + tx;
+  int Row = blockIdx.y * BLOCK_SIZE + ty;
+
+  // Initialize accumulation variable
+  float Pvalue = 0;
+
+  // Loop over tiles required for matrix multiplication
+  for (int p = 0; p < (WA + BLOCK_SIZE - 1) / BLOCK_SIZE; p++) {
+    // Load A's tile into shared memory
+    if (Row < HA && (p * BLOCK_SIZE + tx) < WA) {
+      ds_A[ty][tx] = A[Row * WA + (p * BLOCK_SIZE + tx)];
+    } else {
+      ds_A[ty][tx] = 0.0;
+    }
+
+    // Load B's tile into shared memory
+    if ((p * BLOCK_SIZE + ty) < HB && Col < WB) {
+      ds_B[ty][tx] = B[(p * BLOCK_SIZE + ty) * WB + Col];
+    } else {
+      ds_B[ty][tx] = 0.0;
+    }
+
+    // Synchronize threads to ensure tiles are loaded
+    __syncthreads();
+
+    // Multiply the two tiles and accumulate the result
+    for (int i = 0; i < BLOCK_SIZE; i++) {
+      Pvalue += ds_A[ty][i] * ds_B[i][tx];
+    }
+
+    // Synchronize threads before loading new tiles
+    __syncthreads();
+  }
+
+  // Store the result in C, only if within bounds
+  if (Row < HC && Col < WC) {
+    C[Row * WC + Col] = Pvalue;
+  }
+}
+
+__global__ void vecAdd(float *A_vec, float *B_vec, int len) {
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (i < len)
+    A_vec[i] += B_vec[i];
+}
+
+__global__ void matAdd(float *A, float *B, float *C, int rows, int cols) {
+  int row = blockIdx.y * blockDim.y + threadIdx.y; // y-index
+  int col = blockIdx.x * blockDim.x + threadIdx.x; // x-index
+
+  int idx = row * cols + col;
+
+  if (row < rows && col < cols) {
+    C[idx] = A[idx] + B[idx];
   }
 }
