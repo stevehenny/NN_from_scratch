@@ -35,7 +35,9 @@ void mlpLayer::forward(float *d_input, float *d_output) {
       1,           // HC
       output_size  // WC
   );
+  cudaCheck(cudaDeviceSynchronize());
 
   // add the bias
   vecAdd<<<(output_size + 255) / 256, 256>>>(d_output, d_bias, output_size);
+  cudaCheck(cudaDeviceSynchronize());
 }
