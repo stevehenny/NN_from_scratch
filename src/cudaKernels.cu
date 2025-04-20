@@ -108,3 +108,17 @@ __global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
 
   B[input_channel * HB * WB + out_row * WB + out_col] = temp;
 }
+
+__global__ void ReLU_kernel(float *B, int HB, int WB, int channels) {
+
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
+  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  int input_channel = blockIdx.z;
+
+  if (row >= HB || col >= WB)
+    return;
+
+  if (B[row * WB + col + input_channel * WB * HB] < 0) {
+    B[row * WB + col + input_channel * WB * HB] = 0;
+  }
+}

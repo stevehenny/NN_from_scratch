@@ -19,6 +19,7 @@ public:
             uint8_t output_channels);
   ~convLayer();
   void forward(float *input_image, float *output_image);
+  void ReLU(float *B);
 
 private:
   int HA, WA, HB, WB, HC, WC; // A - input, B - output, C - kernel
