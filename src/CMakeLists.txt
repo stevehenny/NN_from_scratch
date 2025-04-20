@@ -2,7 +2,7 @@
 add_library(LoadData STATIC LoadData.cpp)
 
 # Compile the CUDA executable
-add_executable(main main.cu convLayer.cu cudaKernels.cu)
+add_executable(main main.cu convLayer.cu cudaKernels.cu maxPool.cu)
 
 # Set CUDA compilation properties
 set_target_properties(main PROPERTIES 

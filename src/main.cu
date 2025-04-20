@@ -1,5 +1,7 @@
+#include "CudaChecks.cuh"
 #include "LoadData.h"
 #include "convLayer.cuh"
+#include "maxPool.cuh"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -45,6 +47,8 @@ int main(int argc, char *argv[]) {
   const int out_cols = cols - (kernel_size - 1);
   const int output_size_per_channel = out_rows * out_cols;
 
+  int pool_rows = out_rows / 2;
+  int pool_cols = out_cols / 2;
   // Load MNIST
   uint8_t *images = loadMNISTImages(imageFile, numImages, rows, cols);
   uint8_t *labels = loadMNISTLabels(labelFile, numImages);
@@ -84,20 +88,52 @@ int main(int argc, char *argv[]) {
                 ImageSize(kernel_size, kernel_size), kernels, input_channels,
                 output_channels);
 
+  maxPool poolLayer =
+      maxPool(out_rows, out_cols, out_rows / 2, out_cols / 2, output_channels);
   // Prepare input and output buffers
   float *input_image = getInputImage(normalized_images, 3);
   float *output_image = (float *)malloc(
       output_channels * output_size_per_channel * sizeof(float));
+  float *output_maxPool;
 
+  output_maxPool =
+      (float *)malloc(output_channels * pool_rows * pool_cols * sizeof(float));
+  float *d_input_image;
+  float *d_output_image;
+  float *d_output_maxPool;
+  cudaCheck(cudaMalloc((void **)&d_input_image,
+                       input_channels * cols * rows * sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&d_output_image,
+                       output_channels * out_cols * out_rows * sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&d_output_maxPool, output_channels * out_cols /
+                                                       2 * out_rows / 2 *
+                                                       sizeof(float)));
+  cudaCheck(cudaMemcpy(d_input_image, input_image,
+                       input_channels * cols * rows * sizeof(float),
+                       cudaMemcpyHostToDevice));
   // Run forward pass
-  layer1.forward(input_image, output_image);
+  layer1.forward(d_input_image, d_output_image);
+  poolLayer.forward(d_output_image, d_output_maxPool);
 
+  cudaCheck(cudaMemcpy(output_image, d_output_image,
+                       output_channels * out_cols * out_rows * sizeof(float),
+                       cudaMemcpyDeviceToHost));
+
+  cudaCheck(cudaMemcpy(output_maxPool, d_output_maxPool,
+                       output_channels * pool_rows * pool_cols * sizeof(float),
+                       cudaMemcpyDeviceToHost));
+  cudaCheck(cudaFree(d_input_image));
+  cudaCheck(cudaFree(d_output_image));
+  cudaCheck(cudaFree(d_output_maxPool));
   // Save the input image to a binary file
   saveToFile(input_image, imageSize, "input_bin");
 
   // Save the output image to a binary file
   saveToFile(output_image, output_channels * output_size_per_channel,
              "output_bin");
+
+  saveToFile(output_maxPool, output_channels * pool_rows * pool_cols,
+             "pool_bin");
 
   // Print results
   printf("Label: %d\n", labels[0]);

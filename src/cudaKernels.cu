@@ -77,7 +77,7 @@ __global__ void Convolution3D(float *A, float *B, float *C, int HA, int WA,
       B[out_channel * HB * WB + out_row * WB + out_col] = tmp;
     }
 
-    __syncthreads(); // Sync before next input channel
+    __syncthreads();
   }
 }
 
@@ -85,12 +85,26 @@ __global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
                           int input_channels) {
   int out_col = blockIdx.x * blockDim.x + threadIdx.x;
   int out_row = blockIdx.y * blockDim.y + threadIdx.y;
-  int in_col = out_col * 2;
-  int in_row = out_row * 2;
   int input_channel = blockIdx.z;
-  __shared__ float shm[BLOCK_SIZE][BLOCK_SIZE];
 
-  if (in_row < HA && in_col < WA && in_row >= 0 && in_col >= 0) {
+  if (out_row >= HB || out_col >= WB)
+    return; // bounds check
+
+  int in_row = out_row * 2;
+  int in_col = out_col * 2;
+
+  float temp = -1000.0f;
+
+  // 2x2 pooling window
+  for (int i = 0; i < 2; ++i) {
+    for (int j = 0; j < 2; ++j) {
+      int r = in_row + i;
+      int c = in_col + j;
+      float val = A[input_channel * HA * WA + r * WA + c];
+      if (val > temp)
+        temp = val;
+    }
   }
-  __syncthreads();
+
+  B[input_channel * HB * WB + out_row * WB + out_col] = temp;
 }
