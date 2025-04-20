@@ -113,6 +113,7 @@ int main(int argc, char *argv[]) {
                        cudaMemcpyHostToDevice));
   // Run forward pass
   layer1.forward(d_input_image, d_output_image);
+  layer1.ReLU(d_output_image);
   poolLayer.forward(d_output_image, d_output_maxPool);
 
   cudaCheck(cudaMemcpy(output_image, d_output_image,

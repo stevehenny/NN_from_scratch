@@ -42,3 +42,20 @@ void convLayer::forward(float *d_input_image, float *d_output_image) {
 
   cudaCheck(cudaDeviceSynchronize());
 }
+
+void convLayer::ReLU(float *B) {
+
+  dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
+  int grid_x = (WB + BLOCK_SIZE - 1) / BLOCK_SIZE;
+  int grid_y = (HB + BLOCK_SIZE - 1) / BLOCK_SIZE;
+  dim3 grid(grid_x, grid_y, output_channels);
+  ReLU_kernel<<<grid, threads>>>(B, HB, WB, output_channels);
+
+  cudaError_t error = cudaGetLastError();
+  if (error != cudaSuccess) {
+    std::cerr << cudaGetErrorString(error) << std::endl;
+    throw std::runtime_error("Cuda kernel failed\n");
+  }
+
+  cudaCheck(cudaDeviceSynchronize());
+}

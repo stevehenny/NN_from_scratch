@@ -8,3 +8,5 @@ __global__ void Convolution3D(float *A, float *B, float *C, int HA, int WA,
 
 __global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
                           int input_channels);
+
+__global__ void ReLU_kernel(float *A, int HA, int WA, int channels);
