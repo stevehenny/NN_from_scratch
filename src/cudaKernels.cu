@@ -1,5 +1,4 @@
 #include "cudaKernels.cuh"
-#define BLOCK_SIZE 32
 #define SHARED_BLOCK_SIZE BLOCK_SIZE + 2
 
 __global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
@@ -120,5 +119,117 @@ __global__ void ReLU_kernel(float *B, int HB, int WB, int channels) {
 
   if (B[row * WB + col + input_channel * WB * HB] < 0) {
     B[row * WB + col + input_channel * WB * HB] = 0;
+  }
+}
+
+// sgemm stands for single precision general matrix-matrix multiply
+__global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
+                      int WB, int HC, int WC) {
+  //@@ Insert code to implement matrix multiplication here
+  //@@ You have to use shared memory for this lab
+  __shared__ float ds_A[BLOCK_SIZE][BLOCK_SIZE];
+  __shared__ float ds_B[BLOCK_SIZE][BLOCK_SIZE];
+
+  // Calculate thread indexes
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+  int Col = blockIdx.x * BLOCK_SIZE + tx;
+  int Row = blockIdx.y * BLOCK_SIZE + ty;
+
+  // Initialize accumulation variable
+  float Pvalue = 0;
+
+  // Loop over tiles required for matrix multiplication
+  for (int p = 0; p < (WA + BLOCK_SIZE - 1) / BLOCK_SIZE; p++) {
+    // Load A's tile into shared memory
+    if (Row < HA && (p * BLOCK_SIZE + tx) < WA) {
+      ds_A[ty][tx] = A[Row * WA + (p * BLOCK_SIZE + tx)];
+    } else {
+      ds_A[ty][tx] = 0.0;
+    }
+
+    // Load B's tile into shared memory
+    if ((p * BLOCK_SIZE + ty) < HB && Col < WB) {
+      ds_B[ty][tx] = B[(p * BLOCK_SIZE + ty) * WB + Col];
+    } else {
+      ds_B[ty][tx] = 0.0;
+    }
+
+    // Synchronize threads to ensure tiles are loaded
+    __syncthreads();
+
+    // Multiply the two tiles and accumulate the result
+    for (int i = 0; i < BLOCK_SIZE; i++) {
+      Pvalue += ds_A[ty][i] * ds_B[i][tx];
+    }
+
+    // Synchronize threads before loading new tiles
+    __syncthreads();
+  }
+
+  // Store the result in C, only if within bounds
+  if (Row < HC && Col < WC) {
+    C[Row * WC + Col] = Pvalue;
+  }
+}
+
+__global__ void vecAdd(float *A_vec, float *B_vec, int len) {
+  int i = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (i < len)
+    A_vec[i] += B_vec[i];
+}
+
+__global__ void matAdd(float *A, float *B, float *C, int rows, int cols) {
+  int row = blockIdx.y * blockDim.y + threadIdx.y; // y-index
+  int col = blockIdx.x * blockDim.x + threadIdx.x; // x-index
+
+  int idx = row * cols + col;
+
+  if (row < rows && col < cols) {
+    C[idx] = A[idx] + B[idx];
+  }
+}
+
+__global__ void softmaxKernel(const float *input, float *output, int len) {
+  __shared__ float max_val;
+  __shared__ float sum_exp;
+
+  // Step 1: Find max value for numerical stability (single thread does it)
+  if (threadIdx.x == 0) {
+    float max_tmp = input[0];
+    for (int i = 1; i < len; ++i) {
+      if (input[i] > max_tmp)
+        max_tmp = input[i];
+    }
+    max_val = max_tmp;
+  }
+  __syncthreads();
+
+  // Step 2: Compute exp(x_i - max) and accumulate sum
+  float local = 0.0f;
+  for (int i = threadIdx.x; i < len; i += blockDim.x) {
+    local += expf(input[i] - max_val);
+  }
+
+  // Use shared memory to sum partial results from each thread
+  float thread_sum = local;
+  __shared__ float block_sum[32]; // supports up to 1024 threads
+  int lane = threadIdx.x;
+
+  if (lane < 32)
+    block_sum[lane] = 0;
+  __syncthreads();
+
+  atomicAdd(&block_sum[0], thread_sum);
+  __syncthreads();
+
+  if (threadIdx.x == 0)
+    sum_exp = block_sum[0];
+  __syncthreads();
+
+  // Step 3: Compute softmax output
+  for (int i = threadIdx.x; i < len; i += blockDim.x) {
+    output[i] = expf(input[i] - max_val) / sum_exp;
   }
 }

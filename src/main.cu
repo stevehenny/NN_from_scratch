@@ -1,7 +1,6 @@
 #include "CudaChecks.cuh"
+#include "LayerClasses.cuh"
 #include "LoadData.h"
-#include "convLayer.cuh"
-#include "maxPool.cuh"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -100,32 +99,34 @@ int main(int argc, char *argv[]) {
       (float *)malloc(output_channels * pool_rows * pool_cols * sizeof(float));
   float *d_input_image;
   float *d_output_image;
-  float *d_output_maxPool;
+  float *d_output_maxPool1;
+
   cudaCheck(cudaMalloc((void **)&d_input_image,
                        input_channels * cols * rows * sizeof(float)));
   cudaCheck(cudaMalloc((void **)&d_output_image,
                        output_channels * out_cols * out_rows * sizeof(float)));
-  cudaCheck(cudaMalloc((void **)&d_output_maxPool, output_channels * out_cols /
-                                                       2 * out_rows / 2 *
-                                                       sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&d_output_maxPool1, output_channels * out_cols /
+                                                        2 * out_rows / 2 *
+                                                        sizeof(float)));
   cudaCheck(cudaMemcpy(d_input_image, input_image,
                        input_channels * cols * rows * sizeof(float),
                        cudaMemcpyHostToDevice));
   // Run forward pass
-  layer1.forward(d_input_image, d_output_image);
+  d_output_image = layer1.forward(d_input_image, d_output_image);
   layer1.ReLU(d_output_image);
-  poolLayer.forward(d_output_image, d_output_maxPool);
+  d_output_maxPool1 = poolLayer.forward(d_output_image, d_output_maxPool1);
 
+  // copy back to host
   cudaCheck(cudaMemcpy(output_image, d_output_image,
                        output_channels * out_cols * out_rows * sizeof(float),
                        cudaMemcpyDeviceToHost));
 
-  cudaCheck(cudaMemcpy(output_maxPool, d_output_maxPool,
+  cudaCheck(cudaMemcpy(output_maxPool, d_output_maxPool1,
                        output_channels * pool_rows * pool_cols * sizeof(float),
                        cudaMemcpyDeviceToHost));
   cudaCheck(cudaFree(d_input_image));
   cudaCheck(cudaFree(d_output_image));
-  cudaCheck(cudaFree(d_output_maxPool));
+  cudaCheck(cudaFree(d_output_maxPool1));
   // Save the input image to a binary file
   saveToFile(input_image, imageSize, "input_bin");
 
