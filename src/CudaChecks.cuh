@@ -1,6 +1,5 @@
 #ifndef CUDA_CHECK_H
 #define CUDA_CHECK_H
-
 #include <iostream>
 
 #define cudaCheck(stmt)                                                        \

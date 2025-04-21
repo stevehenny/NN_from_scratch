@@ -19,3 +19,6 @@ __global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
 __global__ void vecAdd(float *A_vec, float *B_vec, int len);
 
 __global__ void matAdd(float *A, float *B, float *C, int rows, int cols);
+
+__global__ void softmaxKernel(const float *input, float *output, int rows,
+                              int cols);

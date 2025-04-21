@@ -190,3 +190,46 @@ __global__ void matAdd(float *A, float *B, float *C, int rows, int cols) {
     C[idx] = A[idx] + B[idx];
   }
 }
+
+__global__ void softmaxVector(const float *input, float *output, int len) {
+  __shared__ float max_val;
+  __shared__ float sum_exp;
+
+  // Step 1: Find max value for numerical stability (single thread does it)
+  if (threadIdx.x == 0) {
+    float max_tmp = input[0];
+    for (int i = 1; i < len; ++i) {
+      if (input[i] > max_tmp)
+        max_tmp = input[i];
+    }
+    max_val = max_tmp;
+  }
+  __syncthreads();
+
+  // Step 2: Compute exp(x_i - max) and accumulate sum
+  float local = 0.0f;
+  for (int i = threadIdx.x; i < len; i += blockDim.x) {
+    local += expf(input[i] - max_val);
+  }
+
+  // Use shared memory to sum partial results from each thread
+  float thread_sum = local;
+  __shared__ float block_sum[32]; // supports up to 1024 threads
+  int lane = threadIdx.x;
+
+  if (lane < 32)
+    block_sum[lane] = 0;
+  __syncthreads();
+
+  atomicAdd(&block_sum[0], thread_sum);
+  __syncthreads();
+
+  if (threadIdx.x == 0)
+    sum_exp = block_sum[0];
+  __syncthreads();
+
+  // Step 3: Compute softmax output
+  for (int i = threadIdx.x; i < len; i += blockDim.x) {
+    output[i] = expf(input[i] - max_val) / sum_exp;
+  }
+}
