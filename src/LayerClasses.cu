@@ -24,7 +24,7 @@ convLayer::convLayer(ImageSize inputImageSize, ImageSize outputImageSize,
 
 convLayer::~convLayer() { cudaFree(d_kernels); }
 
-void convLayer::forward(float *d_input_image, float *d_output_image) {
+float *convLayer::forward(float *d_input_image, float *d_output_image) {
 
   dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
   int grid_x = (WB + BLOCK_SIZE - 1) / BLOCK_SIZE;
@@ -42,6 +42,7 @@ void convLayer::forward(float *d_input_image, float *d_output_image) {
   }
 
   cudaCheck(cudaDeviceSynchronize());
+  return d_output_image;
 }
 
 void convLayer::ReLU(float *B) {
@@ -64,7 +65,7 @@ void convLayer::ReLU(float *B) {
 maxPool::maxPool(int HA, int WA, int HB, int WB, int input_channels)
     : HA(HA), WA(WA), HB(HB), WB(WB), input_channels(input_channels) {}
 
-void maxPool::forward(float *d_input, float *d_output) {
+float *maxPool::forward(float *d_input, float *d_output) {
   int grid_x = (WB + POOL_BLOCK_SIZE - 1) / POOL_BLOCK_SIZE;
   int grid_y = (HB + POOL_BLOCK_SIZE - 1) / POOL_BLOCK_SIZE;
   dim3 threads(POOL_BLOCK_SIZE, POOL_BLOCK_SIZE);
@@ -73,6 +74,7 @@ void maxPool::forward(float *d_input, float *d_output) {
                                input_channels);
   cudaCheck(cudaPeekAtLastError());
   cudaCheck(cudaDeviceSynchronize());
+  return d_output;
 }
 
 mlpLayer::mlpLayer(int input_size, int output_size, float *bias, float *weights)
@@ -92,7 +94,7 @@ mlpLayer::~mlpLayer() {
   cudaFree(d_weights);
 }
 
-void mlpLayer::forward(float *d_input, float *d_output) {
+float *mlpLayer::forward(float *d_input, float *d_output) {
   dim3 DimBlock(BLOCK_SIZE, BLOCK_SIZE, 1);
   dim3 DimGrid((output_size + BLOCK_SIZE - 1) / BLOCK_SIZE, 1);
 
@@ -113,6 +115,7 @@ void mlpLayer::forward(float *d_input, float *d_output) {
   // add the bias
   vecAdd<<<(output_size + 255) / 256, 256>>>(d_output, d_bias, output_size);
   cudaCheck(cudaDeviceSynchronize());
+  return d_output;
 }
 
 void mlpLayer::softMax(float *d_input, float *d_output) {

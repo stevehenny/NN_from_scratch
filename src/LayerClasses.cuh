@@ -16,7 +16,7 @@ public:
             ImageSize kernelSize, float *kernels, uint8_t input_channels,
             uint8_t output_channels);
   ~convLayer();
-  void forward(float *input_image, float *output_image);
+  float *forward(float *input_image, float *output_image);
   void ReLU(float *B);
 
 private:
@@ -32,7 +32,7 @@ class maxPool {
 
 public:
   maxPool(int HA, int WA, int HB, int WB, int input_channels);
-  void forward(float *d_input, float *d_output);
+  float *forward(float *d_input, float *d_output);
 
 private:
   int HA, WA, HB, WB, input_channels;
@@ -43,7 +43,7 @@ class mlpLayer {
 public:
   mlpLayer(int input_size, int output_size, float *bias, float *weights);
   ~mlpLayer();
-  void forward(float *d_input, float *d_output);
+  float *forward(float *d_input, float *d_output);
   void softMax(float *d_input, float *d_output);
 
 private:
