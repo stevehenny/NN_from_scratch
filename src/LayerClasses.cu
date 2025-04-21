@@ -1,10 +1,12 @@
 #include "CudaChecks.cuh"
-#include "convLayer.cuh"
+#include "LayerClasses.cuh"
 #include "cudaKernels.cuh"
-#include <cstdint>
 #include <iostream>
 #include <stdexcept>
+
 #define SHARED_BLOCK_SIZE BLOCK_SIZE + 2
+#define POOL_BLOCK_SIZE 16
+
 convLayer::convLayer(ImageSize inputImageSize, ImageSize outputImageSize,
                      ImageSize kernelSize, float *kernels,
                      uint8_t input_channels, uint8_t output_channels)
@@ -56,5 +58,59 @@ void convLayer::ReLU(float *B) {
     throw std::runtime_error("Cuda kernel failed\n");
   }
 
+  cudaCheck(cudaDeviceSynchronize());
+}
+
+maxPool::maxPool(int HA, int WA, int HB, int WB, int input_channels)
+    : HA(HA), WA(WA), HB(HB), WB(WB), input_channels(input_channels) {}
+
+void maxPool::forward(float *d_input, float *d_output) {
+  int grid_x = (WB + POOL_BLOCK_SIZE - 1) / POOL_BLOCK_SIZE;
+  int grid_y = (HB + POOL_BLOCK_SIZE - 1) / POOL_BLOCK_SIZE;
+  dim3 threads(POOL_BLOCK_SIZE, POOL_BLOCK_SIZE);
+  dim3 grid(grid_x, grid_y, input_channels);
+  maxPool2D<<<grid, threads>>>(d_input, d_output, HA, WA, HB, WB,
+                               input_channels);
+  cudaCheck(cudaPeekAtLastError());
+  cudaCheck(cudaDeviceSynchronize());
+}
+
+mlpLayer::mlpLayer(int input_size, int output_size, float *bias, float *weights)
+    : input_size(input_size), output_size(output_size) {
+
+  cudaCheck(cudaMalloc((void **)&d_bias, output_size * sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&d_weights,
+                       input_size * output_size * sizeof(float)));
+
+  cudaMemcpy(d_bias, bias, output_size * sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_weights, weights, input_size * output_size * sizeof(float),
+             cudaMemcpyHostToDevice);
+}
+
+mlpLayer::~mlpLayer() {
+  cudaFree(d_bias);
+  cudaFree(d_weights);
+}
+
+void mlpLayer::forward(float *d_input, float *d_output) {
+  dim3 DimBlock(BLOCK_SIZE, BLOCK_SIZE, 1);
+  dim3 DimGrid((output_size + BLOCK_SIZE - 1) / BLOCK_SIZE, 1);
+
+  // Launch sgemm
+  sgemm<<<DimGrid, DimBlock>>>(
+      d_input,     // A: input (1 x input_size)
+      d_weights,   // B: weights (input_size x output_size)
+      d_output,    // C: output (1 x output_size)
+      1,           // HA
+      input_size,  // WA
+      input_size,  // HB
+      output_size, // WB
+      1,           // HC
+      output_size  // WC
+  );
+  cudaCheck(cudaDeviceSynchronize());
+
+  // add the bias
+  vecAdd<<<(output_size + 255) / 256, 256>>>(d_output, d_bias, output_size);
   cudaCheck(cudaDeviceSynchronize());
 }

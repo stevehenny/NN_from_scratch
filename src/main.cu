@@ -1,7 +1,6 @@
 #include "CudaChecks.cuh"
+#include "LayerClasses.cuh"
 #include "LoadData.h"
-#include "convLayer.cuh"
-#include "maxPool.cuh"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
