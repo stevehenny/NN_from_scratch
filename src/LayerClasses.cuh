@@ -1,6 +1,5 @@
+#pragma once
 #include <cstdint>
-#ifndef CONV_LAYER_H
-#define CONV_LAYER_H
 
 #define KERNEL_SIZE 3
 #define IMAGE_SIZE 28
@@ -29,8 +28,6 @@ private:
   uint8_t depth;
 };
 
-#endif // CONV_LAYER_H
-
 class maxPool {
 
 public:
@@ -47,6 +44,7 @@ public:
   mlpLayer(int input_size, int output_size, float *bias, float *weights);
   ~mlpLayer();
   void forward(float *d_input, float *d_output);
+  void softMax(float *d_input, float *d_output);
 
 private:
   int input_size, output_size;

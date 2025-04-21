@@ -114,3 +114,10 @@ void mlpLayer::forward(float *d_input, float *d_output) {
   vecAdd<<<(output_size + 255) / 256, 256>>>(d_output, d_bias, output_size);
   cudaCheck(cudaDeviceSynchronize());
 }
+
+void mlpLayer::softMax(float *d_input, float *d_output) {
+
+  int blockSize = 128;
+  int gridSize = (output_size + blockSize - 1) / blockSize;
+  softmaxKernel<<<gridSize, blockSize>>>(d_input, d_output, output_size);
+}

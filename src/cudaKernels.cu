@@ -191,7 +191,7 @@ __global__ void matAdd(float *A, float *B, float *C, int rows, int cols) {
   }
 }
 
-__global__ void softmaxVector(const float *input, float *output, int len) {
+__global__ void softmaxKernel(const float *input, float *output, int len) {
   __shared__ float max_val;
   __shared__ float sum_exp;
 
