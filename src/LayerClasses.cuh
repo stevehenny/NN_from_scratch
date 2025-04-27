@@ -13,7 +13,7 @@ class convLayer {
 
 public:
   convLayer(ImageSize inputImageSize, ImageSize outputImageSize,
-            ImageSize kernelSize, float *kernels, uint8_t input_channels,
+            ImageSize kernelSize, uint8_t input_channels,
             uint8_t output_channels);
   ~convLayer();
   float *forward(float *input_image, float *output_image);

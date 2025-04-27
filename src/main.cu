@@ -4,7 +4,6 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <random>
 
 #define INPUT_IMAGE_ROWS 28
 #define INPUT_IMAGE_COLS 28
@@ -63,29 +62,10 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // Random number generator setup
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_real_distribution<float> pos_dist(0.0f, 1.0f);
-  std::uniform_real_distribution<float> neg_dist(-1.0f, 0.0f);
-
-  // Allocate and initialize kernels with actual randomness
-  float *kernels = (float *)malloc(output_channels * input_channels *
-                                   kernel_size * kernel_size * sizeof(float));
-  for (int oc = 0; oc < output_channels; ++oc) {
-    for (int ic = 0; ic < input_channels; ++ic) {
-      for (int i = 0; i < kernel_size * kernel_size; ++i) {
-        kernels[((oc * input_channels + ic) * kernel_size * kernel_size) + i] =
-            ((i + oc) % 2 == 0) ? pos_dist(gen) : neg_dist(gen);
-      }
-    }
-  }
-
   // Initialize conv layer
-  convLayer layer1 =
-      convLayer(ImageSize(rows, cols), ImageSize(out_rows, out_cols),
-                ImageSize(kernel_size, kernel_size), kernels, input_channels,
-                output_channels);
+  convLayer layer1 = convLayer(
+      ImageSize(rows, cols), ImageSize(out_rows, out_cols),
+      ImageSize(kernel_size, kernel_size), input_channels, output_channels);
 
   maxPool poolLayer =
       maxPool(out_rows, out_cols, out_rows / 2, out_cols / 2, output_channels);
@@ -100,6 +80,9 @@ int main(int argc, char *argv[]) {
   float *d_input_image;
   float *d_output_image;
   float *d_output_maxPool1;
+  float *d_input_channels_2;
+  float *d_output_channels_2;
+  float *d_output_maxPool2;
 
   cudaCheck(cudaMalloc((void **)&d_input_image,
                        input_channels * cols * rows * sizeof(float)));
@@ -108,6 +91,10 @@ int main(int argc, char *argv[]) {
   cudaCheck(cudaMalloc((void **)&d_output_maxPool1, output_channels * out_cols /
                                                         2 * out_rows / 2 *
                                                         sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&d_input_channels_2,
+                       output_channels * out_cols / 2 * out_rows / 2 *
+                           sizeof(float)));
+
   cudaCheck(cudaMemcpy(d_input_image, input_image,
                        input_channels * cols * rows * sizeof(float),
                        cudaMemcpyHostToDevice));
@@ -150,7 +137,6 @@ int main(int argc, char *argv[]) {
   free(images);
   free(labels);
   free(normalized_images);
-  free(kernels);
   free(output_image);
 
   return 0;
