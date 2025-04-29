@@ -32,12 +32,13 @@ convLayer::convLayer(ImageSize inputImageSize, ImageSize outputImageSize,
       }
     }
   }
-  cudaCheck(cudaMalloc((void **)&d_kernels, output_channels * KERNEL_SIZE *
-                                                KERNEL_SIZE * sizeof(float)));
-  cudaCheck(
-      cudaMemcpy(d_kernels, kernels,
-                 output_channels * KERNEL_SIZE * KERNEL_SIZE * sizeof(float),
-                 cudaMemcpyHostToDevice));
+  cudaCheck(cudaMalloc((void **)&d_kernels, input_channels * output_channels *
+                                                KERNEL_SIZE * KERNEL_SIZE *
+                                                sizeof(float)));
+  cudaCheck(cudaMemcpy(d_kernels, kernels,
+                       input_channels * output_channels * KERNEL_SIZE *
+                           KERNEL_SIZE * sizeof(float),
+                       cudaMemcpyHostToDevice));
 }
 
 convLayer::~convLayer() {
