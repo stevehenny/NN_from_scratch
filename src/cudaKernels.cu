@@ -1,5 +1,8 @@
 #include "cudaKernels.cuh"
-#define SHARED_BLOCK_SIZE BLOCK_SIZE + 2
+
+#define TILE_WIDTH BLOCK_SIZE
+#define SHARED_ROWS (TILE_WIDTH + KERNEL_SIZE - 1)
+#define SHARED_COLS (TILE_WIDTH + KERNEL_SIZE - 1)
 
 __global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
                             int HB, int WB, int HC, int WC, int input_channels,
@@ -37,46 +40,67 @@ __global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
 __global__ void Convolution3D(float *A, float *B, float *C, int HA, int WA,
                               int HB, int WB, int HC, int WC,
                               int input_channels, int output_channels) {
+  extern __shared__ float shm[]; // dynamically allocated shared memory
+  float *tile = shm;             // alias for readability
+
+  int tx = threadIdx.x;
+  int ty = threadIdx.y;
+
+  int block_output_x = blockIdx.x * (TILE_WIDTH);
+  int block_output_y = blockIdx.y * (TILE_WIDTH);
+
+  int out_col = block_output_x + tx;
+  int out_row = block_output_y + ty;
+
   int out_channel = blockIdx.z;
-
-  // Global output location (row, col) this thread is responsible for
-  int out_col = blockIdx.x * (BLOCK_SIZE - WC + 1) + threadIdx.x;
-  int out_row = blockIdx.y * (BLOCK_SIZE - HC + 1) + threadIdx.y;
-
-  __shared__ float shm[SHARED_BLOCK_SIZE][SHARED_BLOCK_SIZE];
 
   float tmp = 0.0f;
 
+  // Loop over input channels
   for (int in_channel = 0; in_channel < input_channels; ++in_channel) {
     float *input = A + in_channel * HA * WA;
     float *kernel = C + (out_channel * input_channels + in_channel) * HC * WC;
 
-    // Global input coordinates this thread will load into shared memory
-    int in_col = blockIdx.x * (BLOCK_SIZE - WC + 1) + threadIdx.x;
-    int in_row = blockIdx.y * (BLOCK_SIZE - HC + 1) + threadIdx.y;
+    // Shared memory dimensions
+    int shared_width = TILE_WIDTH + WC - 1;
+    int shared_height = TILE_WIDTH + HC - 1;
 
-    if (in_row < HA && in_col < WA && in_row >= 0 && in_col >= 0) {
-      shm[threadIdx.y][threadIdx.x] = input[in_row * WA + in_col];
-    } else {
-      shm[threadIdx.y][threadIdx.x] = 0.0f;
+    // Global input coordinates of top-left of this block's input tile
+    int in_row_base = block_output_y;
+    int in_col_base = block_output_x;
+
+    // Each thread may need to load multiple elements into shared memory
+    for (int y = ty; y < shared_height; y += TILE_WIDTH) {
+      for (int x = tx; x < shared_width; x += TILE_WIDTH) {
+        int in_row = in_row_base + y;
+        int in_col = in_col_base + x;
+        int shm_index = y * shared_width + x;
+        if (in_row < HA && in_col < WA)
+          tile[shm_index] = input[in_row * WA + in_col];
+        else
+          tile[shm_index] = 0.0f;
+      }
     }
-
     __syncthreads();
 
-    // Compute output only from threads assigned to compute one pixel
-    if (threadIdx.y < (BLOCK_SIZE - HC + 1) &&
-        threadIdx.x < (BLOCK_SIZE - WC + 1) && out_row < HB && out_col < WB) {
+    // Only compute if this thread maps to a valid output location
+    if (tx < TILE_WIDTH && ty < TILE_WIDTH && out_col < WB && out_row < HB) {
 
       for (int i = 0; i < HC; ++i) {
         for (int j = 0; j < WC; ++j) {
-          tmp += shm[threadIdx.y + i][threadIdx.x + j] * kernel[i * WC + j];
+          int shm_row = ty + i;
+          int shm_col = tx + j;
+          tmp += tile[shm_row * shared_width + shm_col] * kernel[i * WC + j];
         }
       }
-
-      B[out_channel * HB * WB + out_row * WB + out_col] = tmp;
     }
 
-    __syncthreads();
+    __syncthreads(); // safe barrier before next input channel
+  }
+
+  // Store result
+  if (tx < TILE_WIDTH && ty < TILE_WIDTH && out_col < WB && out_row < HB) {
+    B[out_channel * HB * WB + out_row * WB + out_col] = tmp;
   }
 }
 
