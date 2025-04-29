@@ -65,19 +65,22 @@ __global__ void Convolution3D(float *A, float *B, float *C, int HA, int WA,
     int shared_width = TILE_WIDTH + WC - 1;
     int shared_height = TILE_WIDTH + HC - 1;
 
-    // Global input coordinates to load into shared memory
-    int in_col = block_output_x + tx;
-    int in_row = block_output_y + ty;
+    // Global input coordinates of top-left of this block's input tile
+    int in_row_base = block_output_y;
+    int in_col_base = block_output_x;
 
-    // Load into shared memory
-    if (ty < shared_height && tx < shared_width) {
-      int shm_index = ty * shared_width + tx;
-      if (in_row < HA && in_col < WA)
-        tile[shm_index] = input[in_row * WA + in_col];
-      else
-        tile[shm_index] = 0.0f;
+    // Each thread may need to load multiple elements into shared memory
+    for (int y = ty; y < shared_height; y += TILE_WIDTH) {
+      for (int x = tx; x < shared_width; x += TILE_WIDTH) {
+        int in_row = in_row_base + y;
+        int in_col = in_col_base + x;
+        int shm_index = y * shared_width + x;
+        if (in_row < HA && in_col < WA)
+          tile[shm_index] = input[in_row * WA + in_col];
+        else
+          tile[shm_index] = 0.0f;
+      }
     }
-
     __syncthreads();
 
     // Only compute if this thread maps to a valid output location
@@ -100,6 +103,7 @@ __global__ void Convolution3D(float *A, float *B, float *C, int HA, int WA,
     B[out_channel * HB * WB + out_row * WB + out_col] = tmp;
   }
 }
+
 __global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
                           int input_channels) {
   int out_col = blockIdx.x * blockDim.x + threadIdx.x;

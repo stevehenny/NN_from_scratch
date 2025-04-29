@@ -57,8 +57,10 @@ float *convLayer::forward(float *d_input_image, float *d_output_image) {
   dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
   dim3 grid(grid_x, grid_y, output_channels);
 
-  size_t shared_mem_size =
-      (BLOCK_SIZE) * (BLOCK_SIZE) * sizeof(float); // or more if needed
+  int shared_height = BLOCK_SIZE + HC - 1;
+  int shared_width = BLOCK_SIZE + WC - 1;
+
+  size_t shared_mem_size = shared_height * shared_width * sizeof(float);
 
   Convolution3D<<<grid, threads, shared_mem_size>>>(
       d_input_image, d_output_image, d_kernels, HA, WA, HB, WB, HC, WC,
