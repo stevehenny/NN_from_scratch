@@ -45,8 +45,18 @@ int main(int argc, char *argv[]) {
   const int out_cols = cols - (kernel_size - 1);
   const int output_size_per_channel = out_rows * out_cols;
 
-  int pool_rows = out_rows / 2;
-  int pool_cols = out_cols / 2;
+  const int pool_rows = out_rows / 2;
+  const int pool_cols = out_cols / 2;
+
+  const int out2_rows = pool_rows - (kernel_size - 1);
+  const int out2_cols = pool_cols - (kernel_size - 1);
+  const int pool2_rows = out2_rows / 2;
+  const int pool2_cols = out2_cols / 2;
+  const int conv2_out_channels = 32;
+
+  const int hidden_layer_nodes = 100;
+  const in output_layer_nodes = 10;
+
   // Load MNIST
   uint8_t *images = loadMNISTImages(imageFile, numImages, rows, cols);
   uint8_t *labels = loadMNISTLabels(labelFile, numImages);
@@ -62,14 +72,19 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  // Initialize conv layer
+  // Initialize conv layers
   convLayer layer1 = convLayer(
       ImageSize(rows, cols), ImageSize(out_rows, out_cols),
       ImageSize(kernel_size, kernel_size), input_channels, output_channels);
 
-  maxPool poolLayer =
+  maxPool poolLayer1 =
       maxPool(out_rows, out_cols, out_rows / 2, out_cols / 2, output_channels);
-  // Prepare input and output buffers
+
+  convLayer layer2(
+      ImageSize(pool_rows, pool_cols), ImageSize(out2_rows, out2_cols),
+      ImageSize(kernel_size, kernel_size), output_channels, conv2_out_channels);
+  maxPool pool2(out2_rows, out2_cols, pool2_rows, pool2_cols,
+                conv2_out_channels);
   float *input_image = getInputImage(normalized_images, 3);
   float *output_image = (float *)malloc(
       output_channels * output_size_per_channel * sizeof(float));
@@ -77,43 +92,52 @@ int main(int argc, char *argv[]) {
 
   output_maxPool =
       (float *)malloc(output_channels * pool_rows * pool_cols * sizeof(float));
-  float *d_input_image;
-  float *d_output_image;
-  float *d_output_maxPool1;
-  float *d_input_channels_2;
-  float *d_output_channels_2;
-  float *d_output_maxPool2;
+
+  float *d_input_image, *d_output_conv1, *d_output_pool1, *d_output_conv2,
+      *d_output_pool2, *d_hidden_layer, *d_output_layer;
 
   cudaCheck(cudaMalloc((void **)&d_input_image,
-                       input_channels * cols * rows * sizeof(float)));
-  cudaCheck(cudaMalloc((void **)&d_output_image,
-                       output_channels * out_cols * out_rows * sizeof(float)));
-  cudaCheck(cudaMalloc((void **)&d_output_maxPool1, output_channels * out_cols /
-                                                        2 * out_rows / 2 *
-                                                        sizeof(float)));
-  cudaCheck(cudaMalloc((void **)&d_input_channels_2,
-                       output_channels * out_cols / 2 * out_rows / 2 *
-                           sizeof(float)));
+                       input_channels * rows * cols * sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&d_output_conv1,
+                       output_channels * out_rows * out_cols * sizeof(float)));
+  cudaCheck(
+      cudaMalloc((void **)&d_output_pool1,
+                 output_channels * pool_rows * pool_cols * sizeof(float)));
+  cudaCheck(
+      cudaMalloc((void **)&d_output_conv2,
+                 conv2_out_channels * out2_rows * out2_cols * sizeof(float)));
+  cudaCheck(
+      cudaMalloc((void **)&d_output_pool2,
+                 conv2_out_channels * pool2_rows * pool2_cols * sizeof(float)));
+  cudaCheck(
+      cudaMalloc((void **)&d_hidden_layer, hidden_layer_nodes * sizeof(float)));
+  cudaCheck(
+      cudaMalloc((void **)&d_output_layer, output_layer_nodes * sizeof(float)));
 
   cudaCheck(cudaMemcpy(d_input_image, input_image,
                        input_channels * cols * rows * sizeof(float),
                        cudaMemcpyHostToDevice));
   // Run forward pass
-  d_output_image = layer1.forward(d_input_image, d_output_image);
-  layer1.ReLU(d_output_image);
-  d_output_maxPool1 = poolLayer.forward(d_output_image, d_output_maxPool1);
+  d_output_conv1 = layer1.forward(d_input_image, d_output_conv1);
+  layer1.ReLU(d_output_conv1);
+  d_output_pool1 = poolLayer1.forward(d_output_conv1, d_output_pool1);
+  d_output_conv2 = layer2.forward(d_output_pool1, d_output_conv2);
+  layer2.ReLU(d_output_conv2);
+  d_output_pool2 = pool2.forward(d_output_conv2, d_output_pool2);
 
   // copy back to host
-  cudaCheck(cudaMemcpy(output_image, d_output_image,
+  cudaCheck(cudaMemcpy(output_image, d_output_conv1,
                        output_channels * out_cols * out_rows * sizeof(float),
                        cudaMemcpyDeviceToHost));
 
-  cudaCheck(cudaMemcpy(output_maxPool, d_output_maxPool1,
+  cudaCheck(cudaMemcpy(output_maxPool, d_output_pool1,
                        output_channels * pool_rows * pool_cols * sizeof(float),
                        cudaMemcpyDeviceToHost));
   cudaCheck(cudaFree(d_input_image));
-  cudaCheck(cudaFree(d_output_image));
-  cudaCheck(cudaFree(d_output_maxPool1));
+  cudaCheck(cudaFree(d_output_conv1));
+  cudaCheck(cudaFree(d_output_pool1));
+  cudaCheck(cudaFree(d_output_conv2));
+  cudaCheck(cudaFree(d_output_pool2));
   // Save the input image to a binary file
   saveToFile(input_image, imageSize, "input_bin");
 
