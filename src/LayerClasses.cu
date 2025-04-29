@@ -48,14 +48,21 @@ convLayer::~convLayer() {
 
 float *convLayer::forward(float *d_input_image, float *d_output_image) {
 
+  int tile_output_width = BLOCK_SIZE - WC + 1;
+  int tile_output_height = BLOCK_SIZE - HC + 1;
+
+  int grid_x = (WB + tile_output_width - 1) / tile_output_width;
+  int grid_y = (HB + tile_output_height - 1) / tile_output_height;
+
   dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
-  int grid_x = (WB + BLOCK_SIZE - 1) / BLOCK_SIZE;
-  int grid_y = (HB + BLOCK_SIZE - 1) / BLOCK_SIZE;
   dim3 grid(grid_x, grid_y, output_channels);
 
-  Convolution3D<<<grid, threads>>>(d_input_image, d_output_image, d_kernels, HA,
-                                   WA, HB, WB, HC, WC, input_channels,
-                                   output_channels);
+  size_t shared_mem_size =
+      (BLOCK_SIZE) * (BLOCK_SIZE) * sizeof(float); // or more if needed
+
+  Convolution3D<<<grid, threads, shared_mem_size>>>(
+      d_input_image, d_output_image, d_kernels, HA, WA, HB, WB, HC, WC,
+      input_channels, output_channels);
 
   cudaError_t error = cudaGetLastError();
   if (error != cudaSuccess) {
