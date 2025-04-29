@@ -98,19 +98,45 @@ float *maxPool::forward(float *d_input, float *d_output) {
   return d_output;
 }
 
-mlpLayer::mlpLayer(int input_size, int output_size, float *bias, float *weights)
+mlpLayer::mlpLayer(int input_size, int output_size)
     : input_size(input_size), output_size(output_size) {
 
+  // Random number generator setup
+  std::random_device rd;
+  std::mt19937 gen(rd());
+  std::uniform_real_distribution<float> pos_dist(0.0f, 1.0f);
+  std::uniform_real_distribution<float> neg_dist(-1.0f, 0.0f);
+
+  // Allocate host memory
+  bias = (float *)malloc(output_size * sizeof(float));
+  weights = (float *)malloc(output_size * input_size * sizeof(float));
+
+  // Initialize bias values
+  for (int i = 0; i < output_size; ++i) {
+    bias[i] = (i % 2 == 0) ? pos_dist(gen) : neg_dist(gen);
+  }
+
+  // Initialize weight values
+  for (int i = 0; i < input_size * output_size; ++i) {
+    weights[i] = (i % 2 == 0) ? pos_dist(gen) : neg_dist(gen);
+  }
+
+  // Allocate device memory
   cudaCheck(cudaMalloc((void **)&d_bias, output_size * sizeof(float)));
   cudaCheck(cudaMalloc((void **)&d_weights,
                        input_size * output_size * sizeof(float)));
 
-  cudaMemcpy(d_bias, bias, output_size * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(d_weights, weights, input_size * output_size * sizeof(float),
-             cudaMemcpyHostToDevice);
+  // Copy host memory to device memory
+  cudaCheck(cudaMemcpy(d_bias, bias, output_size * sizeof(float),
+                       cudaMemcpyHostToDevice));
+  cudaCheck(cudaMemcpy(d_weights, weights,
+                       input_size * output_size * sizeof(float),
+                       cudaMemcpyHostToDevice));
 }
 
 mlpLayer::~mlpLayer() {
+  free(bias);
+  free(weights);
   cudaFree(d_bias);
   cudaFree(d_weights);
 }

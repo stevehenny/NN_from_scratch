@@ -7,8 +7,6 @@
 
 #define INPUT_IMAGE_ROWS 28
 #define INPUT_IMAGE_COLS 28
-#define IMAGE_NUMBER(ptr, num)                                                 \
-  (return ((uint8_t *)&ptr[0] + (INPUT_IMAGE_ROWS * INPUT_IMAGE_COLS * num)))
 
 float *getInputImage(float *images, int imageNum) {
 
@@ -55,7 +53,7 @@ int main(int argc, char *argv[]) {
   const int conv2_out_channels = 32;
 
   const int hidden_layer_nodes = 100;
-  const in output_layer_nodes = 10;
+  const int output_layer_nodes = 10;
 
   // Load MNIST
   uint8_t *images = loadMNISTImages(imageFile, numImages, rows, cols);
@@ -85,16 +83,22 @@ int main(int argc, char *argv[]) {
       ImageSize(kernel_size, kernel_size), output_channels, conv2_out_channels);
   maxPool pool2(out2_rows, out2_cols, pool2_rows, pool2_cols,
                 conv2_out_channels);
-  float *input_image = getInputImage(normalized_images, 3);
+
+  mlpLayer hidden_layer(pool2_cols * pool2_rows * conv2_out_channels,
+                        hidden_layer_nodes);
+  mlpLayer output_layer(hidden_layer_nodes, output_layer_nodes);
+  float *input_image = getInputImage(normalized_images, 0);
   float *output_image = (float *)malloc(
       output_channels * output_size_per_channel * sizeof(float));
   float *output_maxPool;
+  float *softmax_output;
 
   output_maxPool =
       (float *)malloc(output_channels * pool_rows * pool_cols * sizeof(float));
+  softmax_output = (float *)malloc(output_layer_nodes * sizeof(float));
 
   float *d_input_image, *d_output_conv1, *d_output_pool1, *d_output_conv2,
-      *d_output_pool2, *d_hidden_layer, *d_output_layer;
+      *d_output_pool2, *d_hidden_layer, *d_output_layer, *d_softmax;
 
   cudaCheck(cudaMalloc((void **)&d_input_image,
                        input_channels * rows * cols * sizeof(float)));
@@ -113,6 +117,8 @@ int main(int argc, char *argv[]) {
       cudaMalloc((void **)&d_hidden_layer, hidden_layer_nodes * sizeof(float)));
   cudaCheck(
       cudaMalloc((void **)&d_output_layer, output_layer_nodes * sizeof(float)));
+  cudaCheck(
+      cudaMalloc((void **)&d_softmax, output_layer_nodes * sizeof(float)));
 
   cudaCheck(cudaMemcpy(d_input_image, input_image,
                        input_channels * cols * rows * sizeof(float),
@@ -124,6 +130,9 @@ int main(int argc, char *argv[]) {
   d_output_conv2 = layer2.forward(d_output_pool1, d_output_conv2);
   layer2.ReLU(d_output_conv2);
   d_output_pool2 = pool2.forward(d_output_conv2, d_output_pool2);
+  d_hidden_layer = hidden_layer.forward(d_output_pool2, d_hidden_layer);
+  d_output_layer = output_layer.forward(d_hidden_layer, d_output_layer);
+  output_layer.softMax(d_output_layer, d_softmax);
 
   // copy back to host
   cudaCheck(cudaMemcpy(output_image, d_output_conv1,
@@ -133,11 +142,17 @@ int main(int argc, char *argv[]) {
   cudaCheck(cudaMemcpy(output_maxPool, d_output_pool1,
                        output_channels * pool_rows * pool_cols * sizeof(float),
                        cudaMemcpyDeviceToHost));
+  cudaCheck(cudaMemcpy(softmax_output, d_softmax,
+                       output_layer_nodes * sizeof(float),
+                       cudaMemcpyDeviceToHost));
   cudaCheck(cudaFree(d_input_image));
   cudaCheck(cudaFree(d_output_conv1));
   cudaCheck(cudaFree(d_output_pool1));
   cudaCheck(cudaFree(d_output_conv2));
   cudaCheck(cudaFree(d_output_pool2));
+  cudaCheck(cudaFree(d_hidden_layer));
+  cudaCheck(cudaFree(d_output_layer));
+  cudaCheck(cudaFree(d_softmax));
   // Save the input image to a binary file
   saveToFile(input_image, imageSize, "input_bin");
 
@@ -152,16 +167,20 @@ int main(int argc, char *argv[]) {
   printf("Label: %d\n", labels[0]);
   printImage(input_image, rows, cols);
 
-  for (int oc = 0; oc < output_channels; ++oc) {
-    printf("=== Output Channel %d ===\n", oc);
-    printImage(&output_image[oc * output_size_per_channel], out_rows, out_cols);
+  // for (int oc = 0; oc < output_channels; ++oc) {
+  //   printf("=== Output Channel %d ===\n", oc);
+  //   printImage(&output_image[oc * output_size_per_channel], out_rows,
+  //   out_cols);
+  // }
+  for (int i = 0; i < output_layer_nodes; ++i) {
+    printf("Chance of %d: %.3f\n", i, softmax_output[i]);
   }
-
   // Cleanup
   free(images);
   free(labels);
   free(normalized_images);
   free(output_image);
-
+  free(output_maxPool);
+  free(softmax_output);
   return 0;
 }
