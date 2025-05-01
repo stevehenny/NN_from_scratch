@@ -257,3 +257,15 @@ __global__ void softmaxKernel(const float *input, float *output, int len) {
     output[i] = expf(input[i] - max_val) / sum_exp;
   }
 }
+
+__device__ float computeCrossEntropyLoss(float *d_output, float *d_target,
+                                         int length) {
+  float loss = 0.0f;
+  for (int i = 0; i < length; ++i) {
+    if (d_target[i] > 0) { // only one class should be '1' in one-hot
+      loss = -logf(d_output[i] + 1e-8); // add epsilon to avoid log(0)
+      break;
+    }
+  }
+  return loss;
+}
