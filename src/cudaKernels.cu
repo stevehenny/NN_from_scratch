@@ -258,7 +258,8 @@ __global__ void softmaxKernel(const float *input, float *output, int len) {
   }
 }
 
-__device__ float computeLoss(float *d_output, float *d_target, int length) {
+__device__ __host__ float computeLoss(float *d_output, float *d_target,
+                                      int length) {
   float loss = 0.0f;
   for (int i = 0; i < length; ++i) {
     float diff = d_output[i] - d_target[i];
@@ -266,8 +267,8 @@ __device__ float computeLoss(float *d_output, float *d_target, int length) {
   }
   return loss / length; // MSE
 }
-__device__ float computeCrossEntropyLoss(float *d_output, float *d_target,
-                                         int length) {
+__device__ __host__ float computeCrossEntropyLoss(float *d_output,
+                                                  float *d_target, int length) {
   float loss = 0.0f;
   for (int i = 0; i < length; ++i) {
     if (d_target[i] > 0) { // only one class should be '1' in one-hot

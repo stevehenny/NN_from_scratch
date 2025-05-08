@@ -1,6 +1,7 @@
 #include "CudaChecks.cuh"
 #include "LayerClasses.cuh"
 #include "LoadData.h"
+#include "cudaKernels.cuh"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -92,6 +93,16 @@ int main(int argc, char *argv[]) {
       output_channels * output_size_per_channel * sizeof(float));
   float *output_maxPool;
   float *softmax_output;
+  float *label_output;
+  // init label_outputs
+  label_output = (float *)malloc(output_layer_nodes * sizeof(float));
+  for (int i = 0; i < output_layer_nodes; ++i) {
+    if (labels[0] == i) {
+      label_output[i] = 1.0f;
+    } else {
+      label_output[i] = 0.0f;
+    }
+  }
 
   output_maxPool =
       (float *)malloc(output_channels * pool_rows * pool_cols * sizeof(float));
@@ -175,6 +186,9 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < output_layer_nodes; ++i) {
     printf("Chance of %d: %.3f\n", i, softmax_output[i]);
   }
+  int length = 10;
+  float loss = computeCrossEntropyLoss(softmax_output, label_output, length);
+  printf("Loss: %.3f\n", loss);
   // Cleanup
   free(images);
   free(labels);
@@ -182,5 +196,6 @@ int main(int argc, char *argv[]) {
   free(output_image);
   free(output_maxPool);
   free(softmax_output);
+  free(label_output);
   return 0;
 }

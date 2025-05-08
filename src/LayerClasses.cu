@@ -175,9 +175,7 @@ float *mlpLayer::forward(float *d_input, float *d_output) {
   return d_output;
 }
 
-void mlpLayer::backProp(float alpha, float *d_weight_loss, float *d_bias_loss) {
-
-}
+float *mlpLayer::backProp(float alpha) {}
 
 void mlpLayer::softMax(float *d_input, float *d_output) {
 

@@ -22,7 +22,8 @@ __global__ void matAdd(float *A, float *B, float *C, int rows, int cols);
 
 __global__ void softmaxKernel(const float *input, float *output, int len);
 
-__device__ float computeLoss(float *d_output, float *d_target, int length);
+__device__ __host__ float computeLoss(float *d_output, float *d_target,
+                                      int length);
 
-__device__ float computeCrossEntropyLoss(float *d_output, float *d_target,
-                                         int length);
+__device__ __host__ float computeCrossEntropyLoss(float *d_output,
+                                                  float *d_target, int length);

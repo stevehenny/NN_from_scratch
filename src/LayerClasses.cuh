@@ -33,6 +33,7 @@ class maxPool {
 public:
   maxPool(int HA, int WA, int HB, int WB, int input_channels);
   float *forward(float *d_input, float *d_output);
+  float *backProp(float alpha);
 
 private:
   int HA, WA, HB, WB, input_channels;
@@ -45,10 +46,11 @@ public:
   ~mlpLayer();
   float *forward(float *d_input, float *d_output);
   void softMax(float *d_input, float *d_output);
-  void backProp(float alpha, float *weight_loss, float *bias_loss);
+  float *backProp(float alpha);
 
 private:
   int input_size, output_size;
   float *bias, *d_bias;       // vector
   float *weights, *d_weights; // matrix
+  float *d_weights_loss, *d_bias_loss;
 };
