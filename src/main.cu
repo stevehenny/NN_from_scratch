@@ -187,8 +187,9 @@ int main(int argc, char *argv[]) {
     printf("Chance of %d: %.3f\n", i, softmax_output[i]);
   }
   int length = 10;
-  float loss = computeCrossEntropyLoss(softmax_output, label_output, length);
-  printf("Loss: %.3f\n", loss);
+  float *output;
+  // computeCrossEntropyLoss(softmax_output, label_output, output, length);
+  // printf("Loss: %.3f\n", *output);
   // Cleanup
   free(images);
   free(labels);

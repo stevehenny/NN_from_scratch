@@ -183,3 +183,6 @@ void mlpLayer::softMax(float *d_input, float *d_output) {
   int gridSize = (output_size + blockSize - 1) / blockSize;
   softmaxKernel<<<gridSize, blockSize>>>(d_input, d_output, output_size);
 }
+
+float mlpLayer::computeLoss(float *y_hat, float *y, float d_output,
+                            int length) {}

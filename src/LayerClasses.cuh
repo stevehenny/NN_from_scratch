@@ -46,6 +46,7 @@ public:
   ~mlpLayer();
   float *forward(float *d_input, float *d_output);
   void softMax(float *d_input, float *d_output);
+  float computeLoss(float *y_hat, float *y, float d_output, int length);
   float *backProp(float alpha);
 
 private:
