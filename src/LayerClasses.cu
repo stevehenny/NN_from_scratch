@@ -18,17 +18,18 @@ convLayer::convLayer(ImageSize inputImageSize, ImageSize outputImageSize,
       HC(kernelSize.height), WC(kernelSize.width) {
 
   // Random number generator setup
-  std::random_device rd;
-  std::mt19937 gen(rd());
-  std::uniform_real_distribution<float> pos_dist(0.0f, 1.0f);
-  std::uniform_real_distribution<float> neg_dist(-1.0f, 0.0f);
+  std::default_random_engine gen;
+  float stddev =
+      sqrtf(2.0f / (inputImageSize.height *
+                    inputImageSize.width)); // He initialization for ReLU
+  std::normal_distribution<float> dist(0.0f, stddev);
   kernels = (float *)malloc(output_channels * input_channels * KERNEL_SIZE *
                             KERNEL_SIZE * sizeof(float));
   for (int oc = 0; oc < output_channels; ++oc) {
     for (int ic = 0; ic < input_channels; ++ic) {
       for (int i = 0; i < KERNEL_SIZE * KERNEL_SIZE; ++i) {
         kernels[((oc * input_channels + ic) * KERNEL_SIZE * KERNEL_SIZE) + i] =
-            ((i + oc) % 2 == 0) ? pos_dist(gen) : neg_dist(gen);
+            dist(gen);
       }
     }
   }
@@ -126,9 +127,10 @@ mlpLayer::mlpLayer(int input_size, int output_size)
     bias[i] = (i % 2 == 0) ? pos_dist(gen) : neg_dist(gen);
   }
 
-  // Initialize weight values
+  float stddev = sqrtf(2.0f / input_size);
+  std::normal_distribution<float> dist(0.0f, stddev);
   for (int i = 0; i < input_size * output_size; ++i) {
-    weights[i] = (i % 2 == 0) ? pos_dist(gen) : neg_dist(gen);
+    weights[i] = dist(gen);
   }
 
   // Allocate device memory

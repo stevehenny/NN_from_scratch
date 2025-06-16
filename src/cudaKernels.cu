@@ -238,7 +238,7 @@ __global__ void softmaxKernel(const float *input, float *output, int len) {
 
   // Use shared memory to sum partial results from each thread
   float thread_sum = local;
-  __shared__ float block_sum[32]; // supports up to 1024 threads
+  __shared__ float block_sum[32];
   int lane = threadIdx.x;
 
   if (lane < 32)
@@ -271,7 +271,7 @@ __device__ __host__ float computeCrossEntropyLoss(float *d_output,
                                                   float *d_target, int length) {
   float loss = 0.0f;
   for (int i = 0; i < length; ++i) {
-    if (d_target[i] > 0) { // only one class should be '1' in one-hot
+    if (d_target[i] > 0) {
       loss = -logf(d_output[i] + 1e-8); // add epsilon to avoid log(0)
       break;
     }

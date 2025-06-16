@@ -28,6 +28,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Usage: <imageFile> <labelFile>\n");
     return 1;
   }
+  float alpha = 0.001;
 
   const char *imageFile = argv[1];
   const char *labelFile = argv[2];
@@ -107,6 +108,8 @@ int main(int argc, char *argv[]) {
   output_maxPool =
       (float *)malloc(output_channels * pool_rows * pool_cols * sizeof(float));
   softmax_output = (float *)malloc(output_layer_nodes * sizeof(float));
+  float *debug_softmax_input =
+      (float *)malloc(output_layer_nodes * sizeof(float));
 
   float *d_input_image, *d_output_conv1, *d_output_pool1, *d_output_conv2,
       *d_output_pool2, *d_hidden_layer, *d_output_layer, *d_softmax;
@@ -156,6 +159,9 @@ int main(int argc, char *argv[]) {
   cudaCheck(cudaMemcpy(softmax_output, d_softmax,
                        output_layer_nodes * sizeof(float),
                        cudaMemcpyDeviceToHost));
+  cudaCheck(cudaMemcpy(debug_softmax_input, d_output_layer,
+                       output_layer_nodes * sizeof(float),
+                       cudaMemcpyDeviceToHost));
   cudaCheck(cudaFree(d_input_image));
   cudaCheck(cudaFree(d_output_conv1));
   cudaCheck(cudaFree(d_output_pool1));
@@ -186,6 +192,10 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < output_layer_nodes; ++i) {
     printf("Chance of %d: %.3f\n", i, softmax_output[i]);
   }
+
+  for (int i = 0; i < output_layer_nodes; ++i) {
+    printf("Activation value %d: %.3f\n", i, debug_softmax_input[i]);
+  }
   int length = 10;
   float *output;
   // computeCrossEntropyLoss(softmax_output, label_output, output, length);
@@ -198,5 +208,6 @@ int main(int argc, char *argv[]) {
   free(output_maxPool);
   free(softmax_output);
   free(label_output);
+  free(debug_softmax_input);
   return 0;
 }
