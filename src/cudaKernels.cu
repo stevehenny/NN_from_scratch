@@ -7,8 +7,9 @@
 __global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
                             int HB, int WB, int HC, int WC, int input_channels,
                             int output_channels) {
-  int col = blockIdx.x * (BLOCK_SIZE - WC + 1) + threadIdx.x;
-  int row = blockIdx.y * (BLOCK_SIZE - WC + 1) + threadIdx.y;
+  int output_block_size = BLOCK_SIZE - WC + 1;
+  int col = blockIdx.x * output_block_size + (threadIdx.x / output_block_size);
+  int row = blockIdx.y * output_block_size + (threadIdx.y % output_block_size);
   int row_i = row - WC + 1;
   int col_i = col - WC + 1;
 
@@ -40,70 +41,52 @@ __global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
 __global__ void Convolution3D(float *A, float *B, float *C, int HA, int WA,
                               int HB, int WB, int HC, int WC,
                               int input_channels, int output_channels) {
-  extern __shared__ float shm[]; // dynamically allocated shared memory
-  float *tile = shm;             // alias for readability
-
+  extern __shared__ float tile[]; // dynamically allocate memory for tile
   int tx = threadIdx.x;
   int ty = threadIdx.y;
 
-  int block_output_x = blockIdx.x * (TILE_WIDTH);
-  int block_output_y = blockIdx.y * (TILE_WIDTH);
-
-  int out_col = block_output_x + tx;
-  int out_row = block_output_y + ty;
-
+  int out_col = blockIdx.x * TILE_WIDTH + tx;
+  int out_row = blockIdx.y * TILE_WIDTH + ty;
   int out_channel = blockIdx.z;
 
   float tmp = 0.0f;
 
-  // Loop over input channels
+  int linear_tid = ty * TILE_WIDTH + tx;
+  int tile_width = TILE_WIDTH + WC - 1;
+  int tile_height = TILE_WIDTH + HC - 1;
+  int tile_size = tile_width * tile_height;
+
   for (int in_channel = 0; in_channel < input_channels; ++in_channel) {
     float *input = A + in_channel * HA * WA;
     float *kernel = C + (out_channel * input_channels + in_channel) * HC * WC;
 
-    // Shared memory dimensions
-    int shared_width = TILE_WIDTH + WC - 1;
-    int shared_height = TILE_WIDTH + HC - 1;
+    // Coalesced load into shared memory
+    for (int i = linear_tid; i < tile_size; i += TILE_WIDTH * TILE_WIDTH) {
+      int row = blockIdx.y * TILE_WIDTH + (i / tile_width);
+      int col = blockIdx.x * TILE_WIDTH + (i % tile_width);
 
-    // Global input coordinates of top-left of this block's input tile
-    int in_row_base = block_output_y;
-    int in_col_base = block_output_x;
-
-    // Each thread may need to load multiple elements into shared memory
-    for (int y = ty; y < shared_height; y += TILE_WIDTH) {
-      for (int x = tx; x < shared_width; x += TILE_WIDTH) {
-        int in_row = in_row_base + y;
-        int in_col = in_col_base + x;
-        int shm_index = y * shared_width + x;
-        if (in_row < HA && in_col < WA)
-          tile[shm_index] = input[in_row * WA + in_col];
-        else
-          tile[shm_index] = 0.0f;
-      }
+      tile[i] = (row < HA && col < WA) ? input[row * WA + col] : 0.0f;
     }
+
     __syncthreads();
 
-    // Only compute if this thread maps to a valid output location
-    if (tx < TILE_WIDTH && ty < TILE_WIDTH && out_col < WB && out_row < HB) {
-
+    // Compute output
+    if (out_row < HB && out_col < WB) {
       for (int i = 0; i < HC; ++i) {
         for (int j = 0; j < WC; ++j) {
-          int shm_row = ty + i;
-          int shm_col = tx + j;
-          tmp += tile[shm_row * shared_width + shm_col] * kernel[i * WC + j];
+          tmp += tile[(ty + i) * tile_width + (tx + j)] * kernel[i * WC + j];
         }
       }
     }
 
-    __syncthreads(); // safe barrier before next input channel
+    __syncthreads(); // sync before loading next input channel
   }
 
-  // Store result
-  if (tx < TILE_WIDTH && ty < TILE_WIDTH && out_col < WB && out_row < HB) {
+  // Write result
+  if (out_row < HB && out_col < WB) {
     B[out_channel * HB * WB + out_row * WB + out_col] = tmp;
   }
 }
-
 __global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
                           int input_channels) {
   int out_col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -258,15 +241,6 @@ __global__ void softmaxKernel(const float *input, float *output, int len) {
   }
 }
 
-__device__ __host__ float computeLoss(float *d_output, float *d_target,
-                                      int length) {
-  float loss = 0.0f;
-  for (int i = 0; i < length; ++i) {
-    float diff = d_output[i] - d_target[i];
-    loss += diff * diff;
-  }
-  return loss / length; // MSE
-}
 __device__ __host__ float computeCrossEntropyLoss(float *d_output,
                                                   float *d_target, int length) {
   float loss = 0.0f;
@@ -276,5 +250,25 @@ __device__ __host__ float computeCrossEntropyLoss(float *d_output,
       break;
     }
   }
+  return loss;
+}
+
+__device__ __host__ float computeCrossEntropyFromLogits(const float *logits,
+                                                        int target_class,
+                                                        int length) {
+  float max_logit = logits[0];
+  for (int i = 1; i < length; ++i) {
+    if (logits[i] > max_logit)
+      max_logit = logits[i];
+  }
+
+  float sum_exp = 0.0f;
+  for (int i = 0; i < length; ++i) {
+    sum_exp += expf(logits[i] - max_logit);
+  }
+
+  float log_sum_exp = logf(sum_exp) + max_logit;
+  float loss = log_sum_exp - logits[target_class];
+
   return loss;
 }
