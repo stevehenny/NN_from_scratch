@@ -22,6 +22,18 @@ __global__ void matAdd(float *A, float *B, float *C, int rows, int cols);
 
 __global__ void softmaxKernel(const float *input, float *output, int len);
 
+__global__ void softmaxCrossEntropyBackward(float *softmax_output, float *label,
+                                            float *grad_output, int length);
+
+__global__ void outerProduct(float *d_out, float *input, float *dW,
+                             int out_size, int in_size);
+
+__global__ void reluBackward(float *input, float *grad_output,
+                             float *grad_input, int size);
+__global__ void maxPoolBackward(float *d_out, int *max_indices, float *d_input,
+                                int size);
+__global__ void sgdUpdate(float *weights, float *grad, float lr, int size);
+
 __device__ __host__ float computeLoss(float *d_output, float *d_target,
                                       int length);
 

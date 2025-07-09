@@ -162,7 +162,6 @@ __global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
       ds_B[ty][tx] = 0.0;
     }
 
-    // Synchronize threads to ensure tiles are loaded
     __syncthreads();
 
     // Multiply the two tiles and accumulate the result
@@ -170,7 +169,6 @@ __global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
       Pvalue += ds_A[ty][i] * ds_B[i][tx];
     }
 
-    // Synchronize threads before loading new tiles
     __syncthreads();
   }
 
@@ -271,4 +269,47 @@ __device__ __host__ float computeCrossEntropyFromLogits(const float *logits,
   float loss = log_sum_exp - logits[target_class];
 
   return loss;
+}
+
+__global__ void softmaxCrossEntropyBackward(float *softmax_output, float *label,
+                                            float *grad_output, int length) {
+  int idx = threadIdx.x;
+  if (idx < length) {
+    grad_output[idx] =
+        softmax_output[idx] - label[idx]; // ∇L/∇z for softmax + cross-entropy
+  }
+}
+
+__global__ void outerProduct(float *d_out, float *input, float *dW,
+                             int out_size, int in_size) {
+  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (row < out_size && col < in_size) {
+    dW[row * in_size + col] = d_out[row] * input[col];
+  }
+}
+
+__global__ void reluBackward(float *input, float *grad_output,
+                             float *grad_input, int size) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < size) {
+    grad_input[idx] = input[idx] > 0 ? grad_output[idx] : 0;
+  }
+}
+
+__global__ void maxPoolBackward(float *d_out, int *max_indices, float *d_input,
+                                int size) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < size) {
+    int max_idx = max_indices[idx];
+    d_input[max_idx] = d_out[idx]; // Only route gradient to max loc
+  }
+}
+
+__global__ void sgdUpdate(float *weights, float *grad, float lr, int size) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < size) {
+    weights[idx] -= lr * grad[idx];
+  }
 }

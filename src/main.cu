@@ -114,6 +114,8 @@ int main(int argc, char *argv[]) {
   float *d_input_image, *d_output_conv1, *d_output_pool1, *d_output_conv2,
       *d_output_pool2, *d_hidden_layer, *d_output_layer, *d_softmax;
 
+  int *d_max_ind_pool1, *d_max_ind_pool2;
+
   cudaCheck(cudaMalloc((void **)&d_input_image,
                        input_channels * rows * cols * sizeof(float)));
   cudaCheck(cudaMalloc((void **)&d_output_conv1,
@@ -121,12 +123,16 @@ int main(int argc, char *argv[]) {
   cudaCheck(
       cudaMalloc((void **)&d_output_pool1,
                  output_channels * pool_rows * pool_cols * sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&d_max_ind_pool1,
+                       pool_rows * pool_cols * sizeof(int)));
   cudaCheck(
       cudaMalloc((void **)&d_output_conv2,
                  conv2_out_channels * out2_rows * out2_cols * sizeof(float)));
   cudaCheck(
       cudaMalloc((void **)&d_output_pool2,
                  conv2_out_channels * pool2_rows * pool2_cols * sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&d_max_ind_pool2,
+                       pool2_rows * pool2_cols * sizeof(int)));
   cudaCheck(
       cudaMalloc((void **)&d_hidden_layer, hidden_layer_nodes * sizeof(float)));
   cudaCheck(
@@ -140,10 +146,12 @@ int main(int argc, char *argv[]) {
   // Run forward pass
   d_output_conv1 = layer1.forward(d_input_image, d_output_conv1);
   layer1.ReLU(d_output_conv1);
-  d_output_pool1 = poolLayer1.forward(d_output_conv1, d_output_pool1);
+  d_output_pool1 =
+      poolLayer1.forward(d_output_conv1, d_output_pool1, d_max_ind_pool2);
   d_output_conv2 = layer2.forward(d_output_pool1, d_output_conv2);
   layer2.ReLU(d_output_conv2);
-  d_output_pool2 = pool2.forward(d_output_conv2, d_output_pool2);
+  d_output_pool2 =
+      pool2.forward(d_output_conv2, d_output_pool2, d_max_ind_pool2);
   d_hidden_layer = hidden_layer.forward(d_output_pool2, d_hidden_layer);
   d_output_layer = output_layer.forward(d_hidden_layer, d_output_layer);
   output_layer.softMax(d_output_layer, d_softmax);

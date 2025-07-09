@@ -32,7 +32,7 @@ class maxPool {
 
 public:
   maxPool(int HA, int WA, int HB, int WB, int input_channels);
-  float *forward(float *d_input, float *d_output);
+  float *forward(float *d_input, float *d_output, int *d_max_ind);
   float *backProp(float alpha);
 
 private:
