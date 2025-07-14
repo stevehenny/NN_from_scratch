@@ -111,6 +111,11 @@ int main(int argc, char *argv[]) {
   float *debug_softmax_input =
       (float *)malloc(output_layer_nodes * sizeof(float));
 
+  // intermediary output for hidden layer relu before and after
+  float *relu_before, *relu_after;
+  relu_before = (float *)malloc(hidden_layer_nodes * sizeof(float));
+  relu_after = (float *)malloc(hidden_layer_nodes * sizeof(float));
+
   float *d_input_image, *d_output_conv1, *d_output_pool1, *d_output_conv2,
       *d_output_pool2, *d_hidden_layer, *d_output_layer, *d_softmax;
 
@@ -153,6 +158,14 @@ int main(int argc, char *argv[]) {
   d_output_pool2 =
       pool2.forward(d_output_conv2, d_output_pool2, d_max_ind_pool2);
   d_hidden_layer = hidden_layer.forward(d_output_pool2, d_hidden_layer);
+  cudaCheck(cudaMemcpy(relu_before, d_hidden_layer,
+                       hidden_layer_nodes * sizeof(float),
+                       cudaMemcpyDeviceToHost));
+  hidden_layer.ReLU(d_hidden_layer);
+
+  cudaCheck(cudaMemcpy(relu_after, d_hidden_layer,
+                       hidden_layer_nodes * sizeof(float),
+                       cudaMemcpyDeviceToHost));
   d_output_layer = output_layer.forward(d_hidden_layer, d_output_layer);
   output_layer.softMax(d_output_layer, d_softmax);
 
@@ -178,6 +191,8 @@ int main(int argc, char *argv[]) {
   cudaCheck(cudaFree(d_hidden_layer));
   cudaCheck(cudaFree(d_output_layer));
   cudaCheck(cudaFree(d_softmax));
+  cudaCheck(cudaFree(d_max_ind_pool1));
+  cudaCheck(cudaFree(d_max_ind_pool2));
   // Save the input image to a binary file
   saveToFile(input_image, imageSize, "input_bin");
 
@@ -204,6 +219,16 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < output_layer_nodes; ++i) {
     printf("Activation value %d: %.3f\n", i, debug_softmax_input[i]);
   }
+
+  printf("Before relu activation\n");
+  for (int i = 0; i < hidden_layer_nodes; ++i) {
+    printf("i = %d: %.3f\n", i, relu_before[i]);
+  }
+
+  printf("After relu activation\n");
+  for (int i = 0; i < hidden_layer_nodes; ++i) {
+    printf("i = %d: %.3f\n", i, relu_after[i]);
+  }
   int length = 10;
   float *output;
   // computeCrossEntropyLoss(softmax_output, label_output, output, length);
@@ -217,5 +242,7 @@ int main(int argc, char *argv[]) {
   free(softmax_output);
   free(label_output);
   free(debug_softmax_input);
+  free(relu_after);
+  free(relu_before);
   return 0;
 }

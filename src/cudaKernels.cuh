@@ -13,6 +13,8 @@ __global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
 
 __global__ void ReLU_kernel(float *A, int HA, int WA, int channels);
 
+__global__ void ReLU_kernel(float *B, int N);
+
 __global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
                       int WB, int HC, int WC);
 

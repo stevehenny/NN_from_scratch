@@ -177,6 +177,14 @@ float *mlpLayer::forward(float *d_input, float *d_output) {
   return d_output;
 }
 
+void mlpLayer::ReLU(float *d_input) {
+
+  int threadsPerBlock = 256;
+  int blocksPerGrid = (input_size + threadsPerBlock - 1) / threadsPerBlock;
+  ReLU_kernel<<<blocksPerGrid, threadsPerBlock>>>(d_input, input_size);
+  cudaCheck(cudaDeviceSynchronize());
+}
+
 float *mlpLayer::backProp(float alpha) {}
 
 void mlpLayer::softMax(float *d_input, float *d_output) {

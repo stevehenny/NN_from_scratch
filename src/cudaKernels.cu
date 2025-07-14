@@ -115,6 +115,7 @@ __global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
   B[input_channel * HB * WB + out_row * WB + out_col] = temp;
 }
 
+// Kernel for Conv layers
 __global__ void ReLU_kernel(float *B, int HB, int WB, int channels) {
 
   int col = blockIdx.x * blockDim.x + threadIdx.x;
@@ -126,6 +127,14 @@ __global__ void ReLU_kernel(float *B, int HB, int WB, int channels) {
 
   if (B[row * WB + col + input_channel * WB * HB] < 0) {
     B[row * WB + col + input_channel * WB * HB] = 0;
+  }
+}
+
+// different kernel for MLP layers
+__global__ void ReLU_kernel(float *B, int N) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < N && B[idx] < 0.0f) {
+    B[idx] = 0.0f;
   }
 }
 
