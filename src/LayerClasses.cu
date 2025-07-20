@@ -184,7 +184,26 @@ void mlpLayer::ReLU(float *d_input) {
   cudaCheck(cudaDeviceSynchronize());
 }
 
-float *mlpLayer::backProp(float alpha) {}
+float *mlpLayer::backProp(float *input, float *dL_dy, float alpha) {
+
+  // compute dy_dz
+  int threadsPerBlock = 256;
+  int blocksPerGrid = (output_size + threadsPerBlock - 1) / threadsPerBlock;
+  reluBackward<<<blocksPerGrid, threadsPerBlock>>>(input, dy_dz, dL_dy,
+                                                   output_size);
+  cudaCheck(cudaDeviceSynchronize());
+
+  // elementwise operation of dL_dy and dy_dz to compute dL_dz
+  tensorElementwiseMult<<<blocksPerGrid, threadsPerBlock>>>(dL_dy, dy_dz, dL_dz,
+                                                            output_size);
+  cudaCheck(cudaDeviceSynchronize());
+
+  // compute dL_dW
+
+  // compute dL_db
+
+  // compute dL_dx
+}
 
 SoftmaxLayer::SoftmaxLayer(int input_size, int output_size)
     : input_size(input_size), output_size(output_size) {

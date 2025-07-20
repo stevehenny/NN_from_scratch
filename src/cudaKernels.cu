@@ -323,3 +323,11 @@ __global__ void sgdUpdate(float *weights, float *grad, float lr, int size) {
     weights[idx] -= lr * grad[idx];
   }
 }
+__global__ void tensorElementwiseMult(float *A, float *B, float *C,
+                                      int totalElements) {
+
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < totalElements) {
+    C[idx] = A[idx] * B[idx];
+  }
+}

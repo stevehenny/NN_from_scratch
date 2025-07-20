@@ -34,6 +34,9 @@ __global__ void reluBackward(float *input, float *grad_output,
                              float *grad_input, int size);
 __global__ void maxPoolBackward(float *d_out, int *max_indices, float *d_input,
                                 int size);
+
+__global__ void tensorElementwiseMult(float *A, float *B, float *C,
+                                      int totalElements);
 __global__ void sgdUpdate(float *weights, float *grad, float lr, int size);
 
 __device__ __host__ float computeLoss(float *d_output, float *d_target,
