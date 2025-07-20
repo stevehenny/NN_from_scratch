@@ -187,11 +187,12 @@ __global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
   }
 }
 
-__global__ void vecAdd(float *A_vec, float *B_vec, int len) {
+__global__ void vecAdd(float *A_vec, float *B_vec, bool neg, int len) {
+  int sign = neg ? -1 : 1;
   int i = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (i < len)
-    A_vec[i] += B_vec[i];
+    A_vec[i] += (B_vec[i] * sign);
 }
 
 __global__ void matAdd(float *A, float *B, float *C, int rows, int cols) {

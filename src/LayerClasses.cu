@@ -170,7 +170,8 @@ float *mlpLayer::forward(float *d_input, float *d_output) {
   cudaCheck(cudaDeviceSynchronize());
 
   // add the bias
-  vecAdd<<<(output_size + 255) / 256, 256>>>(d_output, d_bias, output_size);
+  vecAdd<<<(output_size + 255) / 256, 256>>>(d_output, d_bias, false,
+                                             output_size);
   cudaCheck(cudaDeviceSynchronize());
   return d_output;
 }
@@ -218,4 +219,13 @@ float SoftmaxLayer::computeLoss(float *d_y_hat, float *d_y) {
   return *h_loss;
 }
 
-float *SoftmaxLayer::backProp(float *dL_dy, float *dL_dz, float alpha) {}
+float *SoftmaxLayer::backProp(float *d_y_hat, float *d_y, float alpha) {
+
+  int threadsPerBlock = 256;
+  int blocksPerGrid = (output_size + threadsPerBlock - 1) / threadsPerBlock;
+  dim3 blockDim(threadsPerBlock);
+  dim3 DimGrid(blocksPerGrid);
+  vecAdd<<<DimGrid, DimGrid>>>(d_y_hat, d_y, true, output_size);
+  cudaCheck(cudaDeviceSynchronize());
+  return d_y_hat;
+}

@@ -72,7 +72,7 @@ public:
   ~SoftmaxLayer();
   void softMax(float *d_input, float *d_output);
   float computeLoss(float *y_hat, float *y);
-  float *backProp(float *dL_dy, float *dL_dz, float alpha);
+  float *backProp(float *d_y_hat, float *d_y, float alpha);
 
 private:
   int input_size, output_size;

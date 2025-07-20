@@ -18,7 +18,7 @@ __global__ void ReLU_kernel(float *B, int N);
 __global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
                       int WB, int HC, int WC);
 
-__global__ void vecAdd(float *A_vec, float *B_vec, int len);
+__global__ void vecAdd(float *A_vec, float *B_vec, bool neg, int len);
 
 __global__ void matAdd(float *A, float *B, float *C, int rows, int cols);
 
