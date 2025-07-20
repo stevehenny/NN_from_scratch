@@ -51,7 +51,6 @@ public:
   ~mlpLayer();
   float *forward(float *d_input, float *d_output);
   void ReLU(float *d_input);
-  float computeLoss(float *y_hat, float *y, float d_output, int length);
   float *backProp(float alpha);
 
 private:
@@ -72,11 +71,13 @@ public:
   SoftmaxLayer(int input_size, int output_size);
   ~SoftmaxLayer();
   void softMax(float *d_input, float *d_output);
-  float computeLoss(float *y_hat, float *y, float d_output, int length);
-  float *backProp(float alpha);
+  float computeLoss(float *y_hat, float *y);
+  float *backProp(float *dL_dy, float *dL_dz, float alpha);
 
 private:
   int input_size, output_size;
-  float *dL_dz; // y_hat - y
-  float *dL_dy; // d/dy(Loss(y))
+  float *y_hat, *y;
+  float d_loss, loss;
+  // float *dL_dz; // y_hat - y
+  // float *dL_dy; // d/dy(Loss(y))
 };

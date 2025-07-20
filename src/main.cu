@@ -118,7 +118,8 @@ int main(int argc, char *argv[]) {
   relu_after = (float *)malloc(hidden_layer_nodes * sizeof(float));
 
   float *d_input_image, *d_output_conv1, *d_output_pool1, *d_output_conv2,
-      *d_output_pool2, *d_hidden_layer, *d_output_layer, *d_softmax;
+      *d_output_pool2, *d_hidden_layer, *d_output_layer, *d_softmax,
+      *d_label_output;
 
   int *d_max_ind_pool1, *d_max_ind_pool2;
 
@@ -145,9 +146,14 @@ int main(int argc, char *argv[]) {
       cudaMalloc((void **)&d_output_layer, output_layer_nodes * sizeof(float)));
   cudaCheck(
       cudaMalloc((void **)&d_softmax, output_layer_nodes * sizeof(float)));
+  cudaCheck(
+      cudaMalloc((void **)&d_label_output, output_layer_nodes * sizeof(float)));
 
   cudaCheck(cudaMemcpy(d_input_image, input_image,
                        input_channels * cols * rows * sizeof(float),
+                       cudaMemcpyHostToDevice));
+  cudaCheck(cudaMemcpy(d_label_output, label_output,
+                       sizeof(float) * output_layer_nodes,
                        cudaMemcpyHostToDevice));
   // Run forward pass
   d_output_conv1 = layer1.forward(d_input_image, d_output_conv1);
@@ -169,6 +175,7 @@ int main(int argc, char *argv[]) {
                        cudaMemcpyDeviceToHost));
   d_output_layer = output_layer.forward(d_hidden_layer, d_output_layer);
   softmax_layer.softMax(d_output_layer, d_softmax);
+  float Loss = softmax_layer.computeLoss(d_softmax, d_label_output);
 
   // copy back to host
   cudaCheck(cudaMemcpy(output_image, d_output_conv1,
@@ -194,6 +201,7 @@ int main(int argc, char *argv[]) {
   cudaCheck(cudaFree(d_softmax));
   cudaCheck(cudaFree(d_max_ind_pool1));
   cudaCheck(cudaFree(d_max_ind_pool2));
+  cudaCheck(cudaFree(d_label_output));
   // Save the input image to a binary file
   saveToFile(input_image, imageSize, "input_bin");
 
@@ -233,7 +241,7 @@ int main(int argc, char *argv[]) {
   int length = 10;
   float *output;
   // computeCrossEntropyLoss(softmax_output, label_output, output, length);
-  // printf("Loss: %.3f\n", *output);
+  printf("Loss: %.3f\n", Loss);
   // Cleanup
   free(images);
   free(labels);

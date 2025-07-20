@@ -40,4 +40,4 @@ __device__ __host__ float computeLoss(float *d_output, float *d_target,
                                       int length);
 
 __device__ __host__ float computeCrossEntropyLoss(float *y_hat, float *y,
-                                                  float d_output, int length);
+                                                  int length);
