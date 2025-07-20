@@ -89,6 +89,7 @@ int main(int argc, char *argv[]) {
   mlpLayer hidden_layer(pool2_cols * pool2_rows * conv2_out_channels,
                         hidden_layer_nodes);
   mlpLayer output_layer(hidden_layer_nodes, output_layer_nodes);
+  SoftmaxLayer softmax_layer(output_layer_nodes, output_layer_nodes);
   float *input_image = getInputImage(normalized_images, 0);
   float *output_image = (float *)malloc(
       output_channels * output_size_per_channel * sizeof(float));
@@ -167,7 +168,7 @@ int main(int argc, char *argv[]) {
                        hidden_layer_nodes * sizeof(float),
                        cudaMemcpyDeviceToHost));
   d_output_layer = output_layer.forward(d_hidden_layer, d_output_layer);
-  output_layer.softMax(d_output_layer, d_softmax);
+  softmax_layer.softMax(d_output_layer, d_softmax);
 
   // copy back to host
   cudaCheck(cudaMemcpy(output_image, d_output_conv1,
@@ -220,15 +221,15 @@ int main(int argc, char *argv[]) {
     printf("Activation value %d: %.3f\n", i, debug_softmax_input[i]);
   }
 
-  printf("Before relu activation\n");
-  for (int i = 0; i < hidden_layer_nodes; ++i) {
-    printf("i = %d: %.3f\n", i, relu_before[i]);
-  }
-
-  printf("After relu activation\n");
-  for (int i = 0; i < hidden_layer_nodes; ++i) {
-    printf("i = %d: %.3f\n", i, relu_after[i]);
-  }
+  // printf("Before relu activation\n");
+  // for (int i = 0; i < hidden_layer_nodes; ++i) {
+  //   printf("i = %d: %.3f\n", i, relu_before[i]);
+  // }
+  //
+  // printf("After relu activation\n");
+  // for (int i = 0; i < hidden_layer_nodes; ++i) {
+  //   printf("i = %d: %.3f\n", i, relu_after[i]);
+  // }
   int length = 10;
   float *output;
   // computeCrossEntropyLoss(softmax_output, label_output, output, length);

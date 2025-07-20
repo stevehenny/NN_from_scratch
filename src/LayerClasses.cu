@@ -137,10 +137,8 @@ mlpLayer::mlpLayer(int input_size, int output_size)
   cudaCheck(cudaMalloc((void **)&d_bias, output_size * sizeof(float)));
   cudaCheck(cudaMalloc((void **)&d_weights,
                        input_size * output_size * sizeof(float)));
-
-  // Copy host memory to device memory
-  cudaCheck(cudaMemcpy(d_bias, bias, output_size * sizeof(float),
-                       cudaMemcpyHostToDevice));
+  // Copy host memory to device memory cudaCheck(cudaMemcpy(d_bias, bias,
+  // output_size * sizeof(float), cudaMemcpyHostToDevice));
   cudaCheck(cudaMemcpy(d_weights, weights,
                        input_size * output_size * sizeof(float),
                        cudaMemcpyHostToDevice));
@@ -187,12 +185,16 @@ void mlpLayer::ReLU(float *d_input) {
 
 float *mlpLayer::backProp(float alpha) {}
 
-void mlpLayer::softMax(float *d_input, float *d_output) {
+float mlpLayer::computeLoss(float *y_hat, float *y, float d_output,
+                            int length) {}
 
+SoftmaxLayer::SoftmaxLayer(int input_size, int output_size)
+    : input_size(input_size), output_size(output_size) {}
+
+SoftmaxLayer::~SoftmaxLayer() {}
+
+void SoftmaxLayer::softMax(float *d_input, float *d_output) {
   int blockSize = 128;
   int gridSize = (output_size + blockSize - 1) / blockSize;
   softmaxKernel<<<gridSize, blockSize>>>(d_input, d_output, output_size);
 }
-
-float mlpLayer::computeLoss(float *y_hat, float *y, float d_output,
-                            int length) {}
