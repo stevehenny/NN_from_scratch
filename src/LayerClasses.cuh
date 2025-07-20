@@ -77,7 +77,7 @@ public:
 private:
   int input_size, output_size;
   float *y_hat, *y;
-  float d_loss, loss;
+  float *d_loss, *h_loss;
   // float *dL_dz; // y_hat - y
   // float *dL_dy; // d/dy(Loss(y))
 };

@@ -187,13 +187,19 @@ float *mlpLayer::backProp(float alpha) {}
 
 SoftmaxLayer::SoftmaxLayer(int input_size, int output_size)
     : input_size(input_size), output_size(output_size) {
-  y_hat = (float *)malloc(output_size * sizeof(float));
-  y = (float *)malloc(output_size * sizeof(float));
+  cudaCheck(cudaHostAlloc(&h_loss, sizeof(float), cudaHostAllocDefault));
+  cudaCheck(
+      cudaHostAlloc(&y_hat, sizeof(float) * output_size, cudaHostAllocDefault));
+  cudaCheck(
+      cudaHostAlloc(&y, sizeof(float) * output_size, cudaHostAllocDefault));
+  cudaCheck(cudaMalloc(&d_loss, sizeof(float)));
 }
 
 SoftmaxLayer::~SoftmaxLayer() {
-  free(y_hat);
-  free(y);
+  cudaCheck(cudaFreeHost(h_loss));
+  cudaCheck(cudaFreeHost(y_hat));
+  cudaCheck(cudaFreeHost(y));
+  cudaCheck(cudaFree(d_loss));
 }
 
 void SoftmaxLayer::softMax(float *d_input, float *d_output) {
@@ -207,10 +213,9 @@ float SoftmaxLayer::computeLoss(float *d_y_hat, float *d_y) {
                        cudaMemcpyDeviceToHost));
   cudaCheck(
       cudaMemcpy(y, d_y, sizeof(float) * output_size, cudaMemcpyDeviceToHost));
-  return computeCrossEntropyLoss(y_hat, y, output_size);
+  *h_loss = computeCrossEntropyLoss(y_hat, y, output_size);
+  cudaMemcpy(d_loss, h_loss, sizeof(float), cudaMemcpyHostToDevice);
+  return *h_loss;
 }
 
-float *SoftmaxLayer::backProp(float *dL_dy, float *dL_dz, float alpha) {
-
-  // compute Loss
-}
+float *SoftmaxLayer::backProp(float *dL_dy, float *dL_dz, float alpha) {}
