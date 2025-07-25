@@ -1,5 +1,4 @@
 #include "cudaKernels.cuh"
-
 #define TILE_WIDTH BLOCK_SIZE
 #define SHARED_ROWS (TILE_WIDTH + KERNEL_SIZE - 1)
 #define SHARED_COLS (TILE_WIDTH + KERNEL_SIZE - 1)
@@ -195,14 +194,16 @@ __global__ void vecAdd(float *A_vec, float *B_vec, bool neg, int len) {
     A_vec[i] += (B_vec[i] * sign);
 }
 
-__global__ void matAdd(float *A, float *B, float *C, int rows, int cols) {
+__global__ void matAdd(float *A, float *B, float *C, int rows, int cols,
+                       bool neg, float alpha) {
   int row = blockIdx.y * blockDim.y + threadIdx.y; // y-index
   int col = blockIdx.x * blockDim.x + threadIdx.x; // x-index
 
   int idx = row * cols + col;
+  float sign = neg ? -1.0 : 1.0;
 
   if (row < rows && col < cols) {
-    C[idx] = A[idx] + B[idx];
+    C[idx] = A[idx] + (B[idx] * sign * alpha);
   }
 }
 
@@ -329,5 +330,19 @@ __global__ void tensorElementwiseMult(float *A, float *B, float *C,
   int idx = blockIdx.x * blockDim.x + threadIdx.x;
   if (idx < totalElements) {
     C[idx] = A[idx] * B[idx];
+  }
+}
+
+// CUDA kernel to transpose a matrix A (HA x WA) into B (WA x HA)
+__global__ void transposeKernel(float *A, float *B, int HA, int WA) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  int size = HA * WA;
+
+  if (idx < size) {
+    int row = idx / WA;
+    int col = idx % WA;
+
+    // Transpose: B[col][row] = A[row][col]
+    B[col * HA + row] = A[row * WA + col];
   }
 }

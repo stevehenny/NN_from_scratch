@@ -51,15 +51,17 @@ public:
   ~mlpLayer();
   float *forward(float *d_input, float *d_output);
   void ReLU(float *d_input);
+  void computeGradients(float *input, float *dL_dy);
   float *backProp(float *x, float *dL_dy, float alpha);
 
 private:
   int input_size, output_size;
   float *bias, *d_bias;       // vector
   float *weights, *d_weights; // matrix
-  float *dL_dW;               // Local weight gradient -- dL_dy @ x^T
-  float *dL_db;               // Local gradient -- dL_dy
-  float *dL_dx;               // Local input gradient -- W^T @ dL_dy
+  float *d_weights_transpose;
+  float *dL_dW; // Local weight gradient -- dL_dy @ x^T
+  float *dL_db; // Local gradient -- dL_dy
+  float *dL_dx; // Local input gradient -- W^T @ dL_dy
   float *dL_dz;
   float *dy_dz; // y = ReLU(z) -> dy_dz = (yi > 0) ? 1 : 0
                 // IMPORTANT NOTE: dL_dz (loss of output of MLPLayer), is

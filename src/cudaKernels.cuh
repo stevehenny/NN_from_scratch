@@ -39,6 +39,8 @@ __global__ void tensorElementwiseMult(float *A, float *B, float *C,
                                       int totalElements);
 __global__ void sgdUpdate(float *weights, float *grad, float lr, int size);
 
+__global__ void transposeKernel(float *A, float *B, int HA, int WA);
+
 __device__ __host__ float computeLoss(float *d_output, float *d_target,
                                       int length);
 
