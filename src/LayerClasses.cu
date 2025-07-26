@@ -61,9 +61,15 @@ float *convLayer::forward(float *d_input_image, float *d_output_image) {
   int shared_height = BLOCK_SIZE + HC - 1;
   int shared_width = BLOCK_SIZE + WC - 1;
 
-  size_t shared_mem_size = shared_height * shared_width * sizeof(float);
+  int tile_width = WC + 1;  // adjust this based on needed coverage
+  int tile_height = HC + 1; // adjust this based on needed coverage
+  int shared_mem_bytes = tile_width * tile_height * sizeof(float);
 
-  Convolution3D<<<grid, threads, shared_mem_size>>>(
+  int total_outputs = output_channels * HB * WB;
+  int threads_per_block = 256;
+  int num_blocks = (total_outputs + threads_per_block - 1) / threads_per_block;
+
+  Convolution3D_1d_launch<<<num_blocks, threads_per_block>>>(
       d_input_image, d_output_image, d_kernels, HA, WA, HB, WB, HC, WC,
       input_channels, output_channels);
 

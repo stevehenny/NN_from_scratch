@@ -1,7 +1,6 @@
 #include "CudaChecks.cuh"
 #include "LayerClasses.cuh"
 #include "LoadData.h"
-#include "cudaKernels.cuh"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>

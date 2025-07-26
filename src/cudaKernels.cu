@@ -346,3 +346,40 @@ __global__ void transposeKernel(float *A, float *B, int HA, int WA) {
     B[col * HA + row] = A[row * WA + col];
   }
 }
+
+template <const size_t shared_A>
+__global__ void Convolution3D_1d_launch(float *A, float *B, float *C, int HA,
+                                        int WA, int HB, int WB, int HC, int WC,
+                                        int input_channels,
+                                        int output_channels) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int total_outputs = output_channels * HB * WB;
+
+  if (tid >= total_outputs)
+    return;
+
+  int out_channel = tid / (HB * WB);
+  int rem = tid % (HB * WB);
+  int out_row = rem / WB;
+  int out_col = rem % WB;
+
+  float tmp = 0.0f;
+
+  for (int in_channel = 0; in_channel < input_channels; ++in_channel) {
+    float *input = A + in_channel * HA * WA;
+    float *kernel = C + (out_channel * input_channels + in_channel) * HC * WC;
+
+    for (int i = 0; i < HC; ++i) {
+      for (int j = 0; j < WC; ++j) {
+        int r = out_row + i;
+        int c = out_col + j;
+
+        if (r < HA && c < WA) {
+          tmp += input[r * WA + c] * kernel[i * WC + j];
+        }
+      }
+    }
+  }
+
+  B[out_channel * HB * WB + out_row * WB + out_col] = tmp;
+}
