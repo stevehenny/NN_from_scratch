@@ -188,6 +188,36 @@ __global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
   }
 }
 
+template <const int block_size>
+__global__ void sgemm_1d(float *A, float *B, float *C, int HA, int WA, int WB) {
+  extern __shared__ float shared_mem[]; // Dynamic shared memory
+  float *tile_A = shared_mem;
+  float *tile_B = &shared_mem[block_size];
+
+  int tid = threadIdx.x + blockIdx.x * blockDim.x;
+  if (tid >= WB)
+    return; // Only 1 row
+
+  float sum = 0.0f;
+
+  for (int tile = 0; tile < (WA + block_size - 1) / block_size; ++tile) {
+    int k = tile * block_size + threadIdx.x;
+
+    tile_A[threadIdx.x] = (k < WA) ? A[k] : 0.0f;
+    tile_B[threadIdx.x] = (k < WA) ? B[k * WB + tid] : 0.0f;
+
+    __syncthreads();
+
+    for (int i = 0; i < block_size && (tile * block_size + i) < WA; ++i) {
+      sum += tile_A[i] * tile_B[i];
+    }
+
+    __syncthreads();
+  }
+
+  C[tid] = sum; // row is always 0
+}
+
 __global__ void vecAdd(float *A_vec, float *B_vec, bool neg, int len) {
   int sign = neg ? -1 : 1;
   int i = blockIdx.x * blockDim.x + threadIdx.x;

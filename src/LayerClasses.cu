@@ -161,7 +161,20 @@ float *mlpLayer::forward(float *d_input, float *d_output) {
   dim3 DimBlock(BLOCK_SIZE, BLOCK_SIZE, 1);
   dim3 DimGrid((output_size + BLOCK_SIZE - 1) / BLOCK_SIZE, 1);
 
+  int threadsPerBlock = 256;
+  int blocksPerGrid = (output_size + threadsPerBlock - 1) / threadsPerBlock;
+  const int block_size = 256;
+  size_t shared_mem_size = 2 * block_size * sizeof(float);
   // Launch sgemm
+  // sgemm_1d<block_size><<<blocksPerGrid, threadsPerBlock, shared_mem_size>>>(
+  //     d_input,    // A: input (1 x input_size)
+  //     d_weights,  // B: weights (input_size x output_size)
+  //     d_output,   // C: output (1 x output_size)
+  //     1,          // HA
+  //     input_size, // WA
+  //     output_size // WB
+  // );
+
   sgemm<<<DimGrid, DimBlock>>>(
       d_input,     // A: input (1 x input_size)
       d_weights,   // B: weights (input_size x output_size)
