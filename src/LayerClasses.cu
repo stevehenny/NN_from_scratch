@@ -84,13 +84,13 @@ float *convLayer::forward(float *d_input_image, float *d_output_image) {
 }
 
 void convLayer::ReLU(float *B) {
+  int total_elements = output_channels * WB * HB;
+  int threads_per_block = 256;
+  int blocks_per_grid =
+      (total_elements + threads_per_block - 1) / threads_per_block;
 
-  dim3 threads(BLOCK_SIZE, BLOCK_SIZE);
-  int grid_x = (WB + BLOCK_SIZE - 1) / BLOCK_SIZE;
-  int grid_y = (HB + BLOCK_SIZE - 1) / BLOCK_SIZE;
-  dim3 grid(grid_x, grid_y, output_channels);
-  ReLU_kernel<<<grid, threads>>>(B, HB, WB, output_channels);
-
+  ReLU_kernel<<<blocks_per_grid, threads_per_block>>>(B, HB, WB,
+                                                      output_channels);
   cudaError_t error = cudaGetLastError();
   if (error != cudaSuccess) {
     std::cerr << cudaGetErrorString(error) << std::endl;
@@ -104,12 +104,12 @@ maxPool::maxPool(int HA, int WA, int HB, int WB, int input_channels)
     : HA(HA), WA(WA), HB(HB), WB(WB), input_channels(input_channels) {}
 
 float *maxPool::forward(float *d_input, float *d_output, int *d_max_ind) {
-  int grid_x = (WB + POOL_BLOCK_SIZE - 1) / POOL_BLOCK_SIZE;
-  int grid_y = (HB + POOL_BLOCK_SIZE - 1) / POOL_BLOCK_SIZE;
-  dim3 threads(POOL_BLOCK_SIZE, POOL_BLOCK_SIZE);
-  dim3 grid(grid_x, grid_y, input_channels);
-  maxPool2D<<<grid, threads>>>(d_input, d_output, HA, WA, HB, WB,
-                               input_channels);
+  int total_outputs = HB * WB * input_channels;
+  int block_size = POOL_BLOCK_SIZE * POOL_BLOCK_SIZE;
+  int grid_size = (total_outputs + block_size - 1) / block_size;
+
+  maxPool2D<<<grid_size, block_size>>>(d_input, d_output, HA, WA, HB, WB,
+                                       input_channels);
   cudaCheck(cudaPeekAtLastError());
   cudaCheck(cudaDeviceSynchronize());
   return d_output;
