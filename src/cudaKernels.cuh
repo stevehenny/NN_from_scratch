@@ -1,3 +1,4 @@
+#include <cstdio>
 #define BLOCK_SIZE 16
 #define TILE_WIDTH BLOCK_SIZE
 #define SHARED_ROWS (TILE_WIDTH + KERNEL_SIZE - 1)
@@ -189,33 +190,53 @@ __global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
 }
 
 template <const int block_size>
-__global__ void sgemm_1d(float *A, float *B, float *C, int HA, int WA, int WB) {
-  extern __shared__ float shared_mem[]; // Dynamic shared memory
-  float *tile_A = shared_mem;
-  float *tile_B = &shared_mem[block_size];
+__global__ void sgemm_1d(float *A, float *B, float *C, int HA, int WA, int HB,
+                         int WB, int HC, int WC) {
+  // Shared memory as flat arrays
+  __shared__ float ds_A[block_size * block_size];
+  __shared__ float ds_B[block_size * block_size];
 
-  int tid = threadIdx.x + blockIdx.x * blockDim.x;
-  if (tid >= WB)
-    return; // Only 1 row
+  // 1D thread and block index
+  int thread_id = threadIdx.x;
+  int block_id = blockIdx.x;
 
-  float sum = 0.0f;
+  // Map 1D thread index to 2D within the tile
+  int tx = thread_id % block_size;
+  int ty = thread_id / block_size;
 
-  for (int tile = 0; tile < (WA + block_size - 1) / block_size; ++tile) {
-    int k = tile * block_size + threadIdx.x;
+  // Determine global output row and col
+  int Col = (block_id % ((WC + block_size - 1) / block_size)) * block_size + tx;
+  int Row = (block_id / ((WC + block_size - 1) / block_size)) * block_size + ty;
 
-    tile_A[threadIdx.x] = (k < WA) ? A[k] : 0.0f;
-    tile_B[threadIdx.x] = (k < WA) ? B[k * WB + tid] : 0.0f;
+  float Pvalue = 0.0f;
+
+  for (int p = 0; p < (WA + block_size - 1) / block_size; p++) {
+    // Load A tile
+    if (Row < HA && (p * block_size + tx) < WA) {
+      ds_A[ty * block_size + tx] = A[Row * WA + (p * block_size + tx)];
+    } else {
+      ds_A[ty * block_size + tx] = 0.0f;
+    }
+
+    // Load B tile
+    if ((p * block_size + ty) < HB && Col < WB) {
+      ds_B[ty * block_size + tx] = B[(p * block_size + ty) * WB + Col];
+    } else {
+      ds_B[ty * block_size + tx] = 0.0f;
+    }
 
     __syncthreads();
 
-    for (int i = 0; i < block_size && (tile * block_size + i) < WA; ++i) {
-      sum += tile_A[i] * tile_B[i];
+    for (int i = 0; i < block_size; i++) {
+      Pvalue += ds_A[ty * block_size + i] * ds_B[i * block_size + tx];
     }
 
     __syncthreads();
   }
 
-  C[tid] = sum; // row is always 0
+  if (Row < HC && Col < WC) {
+    C[Row * WC + Col] = Pvalue;
+  }
 }
 
 __global__ void vecAdd(float *A_vec, float *B_vec, bool neg, int len) {
