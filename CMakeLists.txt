@@ -11,10 +11,11 @@ set(CMAKE_CUDA_ARCHITECTURES 89)
 
 # Add include directories
 include_directories(${CMAKE_SOURCE_DIR}/src)
-
+include_directories(${CMAKE_SOURCE_DIR}/tests)
 enable_language(CUDA)
 # Add src as a subdirectory
 add_subdirectory(src)
+add_subdirectory(tests)
 # Fix compile_commands.json for Clangd by removing NVCC entries
 add_custom_command(
   OUTPUT ${CMAKE_BINARY_DIR}/compile_commands_fixed.json

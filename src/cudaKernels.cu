@@ -1,5 +1,4 @@
-#include "cudaKernels.cuh"
-
+#define BLOCK_SIZE 16
 #define TILE_WIDTH BLOCK_SIZE
 #define SHARED_ROWS (TILE_WIDTH + KERNEL_SIZE - 1)
 #define SHARED_COLS (TILE_WIDTH + KERNEL_SIZE - 1)
@@ -7,8 +6,9 @@
 __global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
                             int HB, int WB, int HC, int WC, int input_channels,
                             int output_channels) {
-  int col = blockIdx.x * (BLOCK_SIZE - WC + 1) + threadIdx.x;
-  int row = blockIdx.y * (BLOCK_SIZE - WC + 1) + threadIdx.y;
+  int output_block_size = BLOCK_SIZE - WC + 1;
+  int col = blockIdx.x * output_block_size + (threadIdx.x / output_block_size);
+  int row = blockIdx.y * output_block_size + (threadIdx.y % output_block_size);
   int row_i = row - WC + 1;
   int col_i = col - WC + 1;
 
@@ -40,78 +40,64 @@ __global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
 __global__ void Convolution3D(float *A, float *B, float *C, int HA, int WA,
                               int HB, int WB, int HC, int WC,
                               int input_channels, int output_channels) {
-  extern __shared__ float shm[]; // dynamically allocated shared memory
-  float *tile = shm;             // alias for readability
-
+  extern __shared__ float tile[]; // dynamically allocate memory for tile
   int tx = threadIdx.x;
   int ty = threadIdx.y;
 
-  int block_output_x = blockIdx.x * (TILE_WIDTH);
-  int block_output_y = blockIdx.y * (TILE_WIDTH);
-
-  int out_col = block_output_x + tx;
-  int out_row = block_output_y + ty;
-
+  int out_col = blockIdx.x * TILE_WIDTH + tx;
+  int out_row = blockIdx.y * TILE_WIDTH + ty;
   int out_channel = blockIdx.z;
 
   float tmp = 0.0f;
 
-  // Loop over input channels
+  int linear_tid = ty * TILE_WIDTH + tx;
+  int tile_width = TILE_WIDTH + WC - 1;
+  int tile_height = TILE_WIDTH + HC - 1;
+  int tile_size = tile_width * tile_height;
+
   for (int in_channel = 0; in_channel < input_channels; ++in_channel) {
     float *input = A + in_channel * HA * WA;
     float *kernel = C + (out_channel * input_channels + in_channel) * HC * WC;
 
-    // Shared memory dimensions
-    int shared_width = TILE_WIDTH + WC - 1;
-    int shared_height = TILE_WIDTH + HC - 1;
+    // Coalesced load into shared memory
+    for (int i = linear_tid; i < tile_size; i += TILE_WIDTH * TILE_WIDTH) {
+      int row = blockIdx.y * TILE_WIDTH + (i / tile_width);
+      int col = blockIdx.x * TILE_WIDTH + (i % tile_width);
 
-    // Global input coordinates of top-left of this block's input tile
-    int in_row_base = block_output_y;
-    int in_col_base = block_output_x;
-
-    // Each thread may need to load multiple elements into shared memory
-    for (int y = ty; y < shared_height; y += TILE_WIDTH) {
-      for (int x = tx; x < shared_width; x += TILE_WIDTH) {
-        int in_row = in_row_base + y;
-        int in_col = in_col_base + x;
-        int shm_index = y * shared_width + x;
-        if (in_row < HA && in_col < WA)
-          tile[shm_index] = input[in_row * WA + in_col];
-        else
-          tile[shm_index] = 0.0f;
-      }
+      tile[i] = (row < HA && col < WA) ? input[row * WA + col] : 0.0f;
     }
+
     __syncthreads();
 
-    // Only compute if this thread maps to a valid output location
-    if (tx < TILE_WIDTH && ty < TILE_WIDTH && out_col < WB && out_row < HB) {
-
+    // Compute output
+    if (out_row < HB && out_col < WB) {
       for (int i = 0; i < HC; ++i) {
         for (int j = 0; j < WC; ++j) {
-          int shm_row = ty + i;
-          int shm_col = tx + j;
-          tmp += tile[shm_row * shared_width + shm_col] * kernel[i * WC + j];
+          tmp += tile[(ty + i) * tile_width + (tx + j)] * kernel[i * WC + j];
         }
       }
     }
 
-    __syncthreads(); // safe barrier before next input channel
+    __syncthreads(); // sync before loading next input channel
   }
 
-  // Store result
-  if (tx < TILE_WIDTH && ty < TILE_WIDTH && out_col < WB && out_row < HB) {
+  // Write result
+  if (out_row < HB && out_col < WB) {
     B[out_channel * HB * WB + out_row * WB + out_col] = tmp;
   }
 }
 
 __global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
                           int input_channels) {
-  int out_col = blockIdx.x * blockDim.x + threadIdx.x;
-  int out_row = blockIdx.y * blockDim.y + threadIdx.y;
-  int input_channel = blockIdx.z;
+  int out_index = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (out_row >= HB || out_col >= WB)
-    return; // bounds check
+  int total_outputs = HB * WB * input_channels;
+  if (out_index >= total_outputs)
+    return;
+
+  int out_row = (out_index / WB) % HB;
+  int out_col = out_index % WB;
+  int input_channel = out_index / (HB * WB);
 
   int in_row = out_row * 2;
   int in_col = out_col * 2;
@@ -132,17 +118,24 @@ __global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
   B[input_channel * HB * WB + out_row * WB + out_col] = temp;
 }
 
+// Kernel for Conv layers
 __global__ void ReLU_kernel(float *B, int HB, int WB, int channels) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int total_elements = HB * WB * channels;
 
-  int col = blockIdx.x * blockDim.x + threadIdx.x;
-  int row = blockIdx.y * blockDim.y + threadIdx.y;
-  int input_channel = blockIdx.z;
-
-  if (row >= HB || col >= WB)
+  if (tid >= total_elements)
     return;
 
-  if (B[row * WB + col + input_channel * WB * HB] < 0) {
-    B[row * WB + col + input_channel * WB * HB] = 0;
+  float &val = B[tid];
+  if (val < 0.0f)
+    val = 0.0f;
+}
+
+// different kernel for MLP layers
+__global__ void ReLU_kernel(float *B, int N) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < N && B[idx] < 0.0f) {
+    B[idx] = 0.0f;
   }
 }
 
@@ -179,7 +172,6 @@ __global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
       ds_B[ty][tx] = 0.0;
     }
 
-    // Synchronize threads to ensure tiles are loaded
     __syncthreads();
 
     // Multiply the two tiles and accumulate the result
@@ -187,7 +179,6 @@ __global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
       Pvalue += ds_A[ty][i] * ds_B[i][tx];
     }
 
-    // Synchronize threads before loading new tiles
     __syncthreads();
   }
 
@@ -197,21 +188,24 @@ __global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
   }
 }
 
-__global__ void vecAdd(float *A_vec, float *B_vec, int len) {
+__global__ void vecAdd(float *A_vec, float *B_vec, bool neg, int len) {
+  int sign = neg ? -1 : 1;
   int i = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (i < len)
-    A_vec[i] += B_vec[i];
+    A_vec[i] += (B_vec[i] * sign);
 }
 
-__global__ void matAdd(float *A, float *B, float *C, int rows, int cols) {
+__global__ void matAdd(float *A, float *B, float *C, int rows, int cols,
+                       bool neg, float alpha) {
   int row = blockIdx.y * blockDim.y + threadIdx.y; // y-index
   int col = blockIdx.x * blockDim.x + threadIdx.x; // x-index
 
   int idx = row * cols + col;
+  float sign = neg ? -1.0 : 1.0;
 
   if (row < rows && col < cols) {
-    C[idx] = A[idx] + B[idx];
+    C[idx] = A[idx] + (B[idx] * sign * alpha);
   }
 }
 
@@ -238,7 +232,7 @@ __global__ void softmaxKernel(const float *input, float *output, int len) {
 
   // Use shared memory to sum partial results from each thread
   float thread_sum = local;
-  __shared__ float block_sum[32]; // supports up to 1024 threads
+  __shared__ float block_sum[32];
   int lane = threadIdx.x;
 
   if (lane < 32)
@@ -256,4 +250,137 @@ __global__ void softmaxKernel(const float *input, float *output, int len) {
   for (int i = threadIdx.x; i < len; i += blockDim.x) {
     output[i] = expf(input[i] - max_val) / sum_exp;
   }
+}
+
+__device__ __host__ float computeCrossEntropyLoss(float *d_output,
+                                                  float *d_target, int length) {
+  float loss = 0.0f;
+  for (int i = 0; i < length; ++i) {
+    if (d_target[i] > 0) {
+      loss = -logf(d_output[i] + 1e-8); // add epsilon to avoid log(0)
+      break;
+    }
+  }
+  return loss;
+}
+
+__device__ __host__ float computeCrossEntropyFromLogits(const float *logits,
+                                                        int target_class,
+                                                        int length) {
+  float max_logit = logits[0];
+  for (int i = 1; i < length; ++i) {
+    if (logits[i] > max_logit)
+      max_logit = logits[i];
+  }
+
+  float sum_exp = 0.0f;
+  for (int i = 0; i < length; ++i) {
+    sum_exp += expf(logits[i] - max_logit);
+  }
+
+  float log_sum_exp = logf(sum_exp) + max_logit;
+  float loss = log_sum_exp - logits[target_class];
+
+  return loss;
+}
+
+__global__ void softmaxCrossEntropyBackward(float *softmax_output, float *label,
+                                            float *grad_output, int length) {
+  int idx = threadIdx.x;
+  if (idx < length) {
+    grad_output[idx] =
+        softmax_output[idx] - label[idx]; // ∇L/∇z for softmax + cross-entropy
+  }
+}
+
+__global__ void outerProduct(float *d_out, float *input, float *dW,
+                             int out_size, int in_size) {
+  int row = blockIdx.y * blockDim.y + threadIdx.y;
+  int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+  if (row < out_size && col < in_size) {
+    dW[row * in_size + col] = d_out[row] * input[col];
+  }
+}
+
+__global__ void reluBackward(float *input, float *grad_output,
+                             float *grad_input, int size) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < size) {
+    grad_input[idx] = input[idx] > 0 ? grad_output[idx] : 0;
+  }
+}
+
+__global__ void maxPoolBackward(float *d_out, int *max_indices, float *d_input,
+                                int size) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < size) {
+    int max_idx = max_indices[idx];
+    d_input[max_idx] = d_out[idx]; // Only route gradient to max loc
+  }
+}
+
+__global__ void sgdUpdate(float *weights, float *grad, float lr, int size) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < size) {
+    weights[idx] -= lr * grad[idx];
+  }
+}
+__global__ void tensorElementwiseMult(float *A, float *B, float *C,
+                                      int totalElements) {
+
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  if (idx < totalElements) {
+    C[idx] = A[idx] * B[idx];
+  }
+}
+
+// CUDA kernel to transpose a matrix A (HA x WA) into B (WA x HA)
+__global__ void transposeKernel(float *A, float *B, int HA, int WA) {
+  int idx = blockIdx.x * blockDim.x + threadIdx.x;
+  int size = HA * WA;
+
+  if (idx < size) {
+    int row = idx / WA;
+    int col = idx % WA;
+
+    // Transpose: B[col][row] = A[row][col]
+    B[col * HA + row] = A[row * WA + col];
+  }
+}
+
+__global__ void Convolution3D_1d_launch(float *A, float *B, float *C, int HA,
+                                        int WA, int HB, int WB, int HC, int WC,
+                                        int input_channels,
+                                        int output_channels) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int total_outputs = output_channels * HB * WB;
+
+  if (tid >= total_outputs)
+    return;
+
+  int out_channel = tid / (HB * WB);
+  int rem = tid % (HB * WB);
+  int out_row = rem / WB;
+  int out_col = rem % WB;
+
+  float tmp = 0.0f;
+
+  for (int in_channel = 0; in_channel < input_channels; ++in_channel) {
+    float *input = A + in_channel * HA * WA;
+    float *kernel = C + (out_channel * input_channels + in_channel) * HC * WC;
+
+    for (int i = 0; i < HC; ++i) {
+      for (int j = 0; j < WC; ++j) {
+        int r = out_row + i;
+        int c = out_col + j;
+
+        if (r < HA && c < WA) {
+          tmp += input[r * WA + c] * kernel[i * WC + j];
+        }
+      }
+    }
+  }
+
+  B[out_channel * HB * WB + out_row * WB + out_col] = tmp;
 }

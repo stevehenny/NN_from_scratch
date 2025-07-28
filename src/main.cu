@@ -27,6 +27,7 @@ int main(int argc, char *argv[]) {
     fprintf(stderr, "Usage: <imageFile> <labelFile>\n");
     return 1;
   }
+  float alpha = 0.001;
 
   const char *imageFile = argv[1];
   const char *labelFile = argv[2];
@@ -87,18 +88,39 @@ int main(int argc, char *argv[]) {
   mlpLayer hidden_layer(pool2_cols * pool2_rows * conv2_out_channels,
                         hidden_layer_nodes);
   mlpLayer output_layer(hidden_layer_nodes, output_layer_nodes);
+  SoftmaxLayer softmax_layer(output_layer_nodes, output_layer_nodes);
   float *input_image = getInputImage(normalized_images, 0);
   float *output_image = (float *)malloc(
       output_channels * output_size_per_channel * sizeof(float));
   float *output_maxPool;
   float *softmax_output;
+  float *label_output;
+  // init label_outputs
+  label_output = (float *)malloc(output_layer_nodes * sizeof(float));
+  for (int i = 0; i < output_layer_nodes; ++i) {
+    if (labels[0] == i) {
+      label_output[i] = 1.0f;
+    } else {
+      label_output[i] = 0.0f;
+    }
+  }
 
   output_maxPool =
       (float *)malloc(output_channels * pool_rows * pool_cols * sizeof(float));
   softmax_output = (float *)malloc(output_layer_nodes * sizeof(float));
+  float *debug_softmax_input =
+      (float *)malloc(output_layer_nodes * sizeof(float));
+
+  // intermediary output for hidden layer relu before and after
+  float *relu_before, *relu_after;
+  relu_before = (float *)malloc(hidden_layer_nodes * sizeof(float));
+  relu_after = (float *)malloc(hidden_layer_nodes * sizeof(float));
 
   float *d_input_image, *d_output_conv1, *d_output_pool1, *d_output_conv2,
-      *d_output_pool2, *d_hidden_layer, *d_output_layer, *d_softmax;
+      *d_output_pool2, *d_hidden_layer, *d_output_layer, *d_softmax,
+      *d_label_output;
+
+  int *d_max_ind_pool1, *d_max_ind_pool2;
 
   cudaCheck(cudaMalloc((void **)&d_input_image,
                        input_channels * rows * cols * sizeof(float)));
@@ -107,32 +129,52 @@ int main(int argc, char *argv[]) {
   cudaCheck(
       cudaMalloc((void **)&d_output_pool1,
                  output_channels * pool_rows * pool_cols * sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&d_max_ind_pool1,
+                       pool_rows * pool_cols * sizeof(int)));
   cudaCheck(
       cudaMalloc((void **)&d_output_conv2,
                  conv2_out_channels * out2_rows * out2_cols * sizeof(float)));
   cudaCheck(
       cudaMalloc((void **)&d_output_pool2,
                  conv2_out_channels * pool2_rows * pool2_cols * sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&d_max_ind_pool2,
+                       pool2_rows * pool2_cols * sizeof(int)));
   cudaCheck(
       cudaMalloc((void **)&d_hidden_layer, hidden_layer_nodes * sizeof(float)));
   cudaCheck(
       cudaMalloc((void **)&d_output_layer, output_layer_nodes * sizeof(float)));
   cudaCheck(
       cudaMalloc((void **)&d_softmax, output_layer_nodes * sizeof(float)));
+  cudaCheck(
+      cudaMalloc((void **)&d_label_output, output_layer_nodes * sizeof(float)));
 
   cudaCheck(cudaMemcpy(d_input_image, input_image,
                        input_channels * cols * rows * sizeof(float),
                        cudaMemcpyHostToDevice));
+  cudaCheck(cudaMemcpy(d_label_output, label_output,
+                       sizeof(float) * output_layer_nodes,
+                       cudaMemcpyHostToDevice));
   // Run forward pass
   d_output_conv1 = layer1.forward(d_input_image, d_output_conv1);
   layer1.ReLU(d_output_conv1);
-  d_output_pool1 = poolLayer1.forward(d_output_conv1, d_output_pool1);
+  d_output_pool1 =
+      poolLayer1.forward(d_output_conv1, d_output_pool1, d_max_ind_pool2);
   d_output_conv2 = layer2.forward(d_output_pool1, d_output_conv2);
   layer2.ReLU(d_output_conv2);
-  d_output_pool2 = pool2.forward(d_output_conv2, d_output_pool2);
+  d_output_pool2 =
+      pool2.forward(d_output_conv2, d_output_pool2, d_max_ind_pool2);
   d_hidden_layer = hidden_layer.forward(d_output_pool2, d_hidden_layer);
+  cudaCheck(cudaMemcpy(relu_before, d_hidden_layer,
+                       hidden_layer_nodes * sizeof(float),
+                       cudaMemcpyDeviceToHost));
+  hidden_layer.ReLU(d_hidden_layer);
+
+  cudaCheck(cudaMemcpy(relu_after, d_hidden_layer,
+                       hidden_layer_nodes * sizeof(float),
+                       cudaMemcpyDeviceToHost));
   d_output_layer = output_layer.forward(d_hidden_layer, d_output_layer);
-  output_layer.softMax(d_output_layer, d_softmax);
+  softmax_layer.softMax(d_output_layer, d_softmax);
+  float Loss = softmax_layer.computeLoss(d_softmax, d_label_output);
 
   // copy back to host
   cudaCheck(cudaMemcpy(output_image, d_output_conv1,
@@ -145,6 +187,9 @@ int main(int argc, char *argv[]) {
   cudaCheck(cudaMemcpy(softmax_output, d_softmax,
                        output_layer_nodes * sizeof(float),
                        cudaMemcpyDeviceToHost));
+  cudaCheck(cudaMemcpy(debug_softmax_input, d_output_layer,
+                       output_layer_nodes * sizeof(float),
+                       cudaMemcpyDeviceToHost));
   cudaCheck(cudaFree(d_input_image));
   cudaCheck(cudaFree(d_output_conv1));
   cudaCheck(cudaFree(d_output_pool1));
@@ -153,6 +198,9 @@ int main(int argc, char *argv[]) {
   cudaCheck(cudaFree(d_hidden_layer));
   cudaCheck(cudaFree(d_output_layer));
   cudaCheck(cudaFree(d_softmax));
+  cudaCheck(cudaFree(d_max_ind_pool1));
+  cudaCheck(cudaFree(d_max_ind_pool2));
+  cudaCheck(cudaFree(d_label_output));
   // Save the input image to a binary file
   saveToFile(input_image, imageSize, "input_bin");
 
@@ -175,6 +223,24 @@ int main(int argc, char *argv[]) {
   for (int i = 0; i < output_layer_nodes; ++i) {
     printf("Chance of %d: %.3f\n", i, softmax_output[i]);
   }
+
+  for (int i = 0; i < output_layer_nodes; ++i) {
+    printf("Activation value %d: %.3f\n", i, debug_softmax_input[i]);
+  }
+
+  // printf("Before relu activation\n");
+  // for (int i = 0; i < hidden_layer_nodes; ++i) {
+  //   printf("i = %d: %.3f\n", i, relu_before[i]);
+  // }
+  //
+  // printf("After relu activation\n");
+  // for (int i = 0; i < hidden_layer_nodes; ++i) {
+  //   printf("i = %d: %.3f\n", i, relu_after[i]);
+  // }
+  int length = 10;
+  float *output;
+  // computeCrossEntropyLoss(softmax_output, label_output, output, length);
+  printf("Loss: %.3f\n", Loss);
   // Cleanup
   free(images);
   free(labels);
@@ -182,5 +248,9 @@ int main(int argc, char *argv[]) {
   free(output_image);
   free(output_maxPool);
   free(softmax_output);
+  free(label_output);
+  free(debug_softmax_input);
+  free(relu_after);
+  free(relu_before);
   return 0;
 }
