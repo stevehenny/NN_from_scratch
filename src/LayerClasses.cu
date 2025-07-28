@@ -1,6 +1,5 @@
 #include "CudaChecks.cuh"
 #include "LayerClasses.cuh"
-#include "cudaKernels.cuh"
 #include <cstdlib>
 #include <iostream>
 #include <random>
@@ -36,6 +35,7 @@ convLayer::convLayer(ImageSize inputImageSize, ImageSize outputImageSize,
   cudaCheck(cudaMalloc((void **)&d_kernels, input_channels * output_channels *
                                                 KERNEL_SIZE * KERNEL_SIZE *
                                                 sizeof(float)));
+
   cudaCheck(cudaMemcpy(d_kernels, kernels,
                        input_channels * output_channels * KERNEL_SIZE *
                            KERNEL_SIZE * sizeof(float),
@@ -45,6 +45,8 @@ convLayer::convLayer(ImageSize inputImageSize, ImageSize outputImageSize,
 convLayer::~convLayer() {
   free(kernels);
   cudaFree(d_kernels);
+  // cudaCheck(cudaFree(d_input_image));
+  // cudaCheck(cudaFree(d_output_image));
 }
 
 float *convLayer::forward(float *d_input_image, float *d_output_image) {
@@ -143,8 +145,18 @@ mlpLayer::mlpLayer(int input_size, int output_size)
   cudaCheck(cudaMalloc((void **)&d_bias, output_size * sizeof(float)));
   cudaCheck(cudaMalloc((void **)&d_weights,
                        input_size * output_size * sizeof(float)));
-  // Copy host memory to device memory cudaCheck(cudaMemcpy(d_bias, bias,
-  // output_size * sizeof(float), cudaMemcpyHostToDevice));
+  cudaCheck(
+      cudaMalloc((void **)&dL_dW, input_size * output_size * sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&dL_db, output_size * sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&dL_dx, input_size * sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&dL_dz, output_size * sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&dy_dz, output_size * sizeof(float)));
+  cudaCheck(cudaMalloc((void **)&d_weights_transpose,
+                       input_size * output_size * sizeof(float)));
+
+  // Copy host memory to device memory
+  cudaCheck(cudaMemcpy(d_bias, bias, output_size * sizeof(float),
+                       cudaMemcpyHostToDevice));
   cudaCheck(cudaMemcpy(d_weights, weights,
                        input_size * output_size * sizeof(float),
                        cudaMemcpyHostToDevice));
@@ -153,8 +165,13 @@ mlpLayer::mlpLayer(int input_size, int output_size)
 mlpLayer::~mlpLayer() {
   free(bias);
   free(weights);
-  cudaFree(d_bias);
-  cudaFree(d_weights);
+  cudaCheck(cudaFree(d_bias));
+  cudaCheck(cudaFree(d_weights));
+  cudaCheck(cudaFree(d_weights_transpose));
+  cudaCheck(cudaFree(dL_dW));
+  cudaCheck(cudaFree(dL_dx));
+  cudaCheck(cudaFree(dL_dz));
+  cudaCheck(cudaFree(dy_dz));
 }
 
 float *mlpLayer::forward(float *d_input, float *d_output) {
@@ -178,18 +195,7 @@ float *mlpLayer::forward(float *d_input, float *d_output) {
       1,           // HC
       output_size  // WC
   );
-  // sgemm<<<DimGrid, DimBlock>>>(
-  //     d_input,     // A: input (1 x input_size)
-  //     d_weights,   // B: weights (input_size x output_size)
-  //     d_output,    // C: output (1 x output_size)
-  //     1,           // HA
-  //     input_size,  // WA
-  //     input_size,  // HB
-  //     output_size, // WB
-  //     1,           // HC
-  //     output_size  // WC
-  // );
-  cudaCheck(cudaDeviceSynchronize());
+  (cudaDeviceSynchronize());
 
   // add the bias
   vecAdd<<<(output_size + 255) / 256, 256>>>(d_output, d_bias, false,
@@ -205,13 +211,10 @@ void mlpLayer::ReLU(float *d_input) {
   ReLU_kernel<<<blocksPerGrid, threadsPerBlock>>>(d_input, input_size);
   cudaCheck(cudaDeviceSynchronize());
 }
-
-float *mlpLayer::backProp(float *input, float *dL_dy, float alpha) {
-
-  // compute dy_dz
+void mlpLayer::computeGradients(float *d_input, float *dL_dy) { // compute dy_dz
   int threadsPerBlock = 256;
   int blocksPerGrid = (output_size + threadsPerBlock - 1) / threadsPerBlock;
-  reluBackward<<<blocksPerGrid, threadsPerBlock>>>(input, dy_dz, dL_dy,
+  reluBackward<<<blocksPerGrid, threadsPerBlock>>>(d_input, dy_dz, dL_dy,
                                                    output_size);
   cudaCheck(cudaDeviceSynchronize());
 
@@ -221,10 +224,91 @@ float *mlpLayer::backProp(float *input, float *dL_dy, float alpha) {
   cudaCheck(cudaDeviceSynchronize());
 
   // compute dL_dW
+  constexpr int block_size = 16;
+  threadsPerBlock = 256;
+  blocksPerGrid =
+      (input_size * output_size + threadsPerBlock - 1) / threadsPerBlock;
+  sgemm_1d<block_size><<<blocksPerGrid, threadsPerBlock>>>(
+      d_input, dL_dz, dL_dW, input_size, 1, 1, output_size, input_size,
+      output_size);
+
+  cudaCheck(cudaDeviceSynchronize());
 
   // compute dL_db
+  cudaCheck(cudaMemcpy(dL_db, dL_dz, output_size * sizeof(float),
+                       cudaMemcpyDeviceToDevice));
 
   // compute dL_dx
+  // First, transpose weights;
+  transposeKernel<<<blocksPerGrid, threadsPerBlock>>>(
+      d_weights, d_weights_transpose, input_size, output_size);
+  cudaCheck(cudaDeviceSynchronize());
+
+  // Now compute sgemm of W^T @ dL_dz
+  blocksPerGrid = (input_size + threadsPerBlock - 1) / threadsPerBlock;
+  sgemm_1d<block_size><<<blocksPerGrid, threadsPerBlock>>>(
+      dL_dz, d_weights_transpose, dL_dx, 1, output_size, output_size,
+      input_size, 1, input_size);
+
+  cudaCheck(cudaDeviceSynchronize());
+}
+
+float *mlpLayer::backProp(float *d_input, float *dL_dy, float alpha) {
+  computeGradients(d_input, dL_dy);
+
+  // matAdd all the gradients
+  bool neg = true; // subtract all gradients
+
+  // first do dL_dW
+  int threadsPerBlock = 256;
+  int blocksPerGrid =
+      (output_size * input_size + threadsPerBlock - 1) / threadsPerBlock;
+  matAdd<<<blocksPerGrid, threadsPerBlock>>>(
+      d_weights, dL_dW, d_weights, input_size, output_size, neg, alpha);
+
+  cudaCheck(cudaDeviceSynchronize());
+
+  // now subtract bias gradient
+  blocksPerGrid = (output_size + threadsPerBlock - 1) / threadsPerBlock;
+  matAdd<<<blocksPerGrid, threadsPerBlock>>>(d_bias, dL_db, d_bias, 1,
+                                             output_size, neg, alpha);
+
+  cudaCheck(cudaDeviceSynchronize());
+
+  return dL_dx; // return input_grad pointer for next layer to use
+}
+
+float *mlpLayer::getHostWeights(){
+  return weights;
+}
+
+float *mlpLayer::getHostBias(){
+  return bias;
+}
+
+float *mlpLayer::getDeviceWeights(){
+  return d_weights;
+}
+
+float *mlpLayer::getDeviceBias(){
+  return d_bias;
+}
+
+float *mlpLayer::getWeightGrad(){
+  return dL_dW;
+}
+
+
+float *mlpLayer::getInputGrad(){
+  return dL_dx;
+}
+
+float *mlpLayer::getBiasGrad(){
+  return dL_db;
+}
+
+float *mlpLayer::getOutputGrad(){
+  return dL_dz;
 }
 
 SoftmaxLayer::SoftmaxLayer(int input_size, int output_size)

@@ -1,5 +1,6 @@
 #pragma once
 #include <cstdint>
+#include <cudaKernels.cuh>
 
 #define KERNEL_SIZE 3
 #define IMAGE_SIZE 28
@@ -16,11 +17,12 @@ public:
             ImageSize kernelSize, uint8_t input_channels,
             uint8_t output_channels);
   ~convLayer();
-  float *forward(float *input_image, float *output_image);
+  float *forward(float *d_input_image, float *d_output_image);
   void ReLU(float *B);
 
 private:
   int HA, WA, HB, WB, HC, WC; // A - input, B - output, C - kernel
+  float *d_input_image, *d_output_image;
   float *d_kernels;
   float *kernels;
   uint8_t input_channels;
@@ -53,6 +55,14 @@ public:
   void ReLU(float *d_input);
   void computeGradients(float *input, float *dL_dy);
   float *backProp(float *x, float *dL_dy, float alpha);
+  float *getHostWeights();
+  float *getHostBias();
+  float *getDeviceWeights();
+  float *getDeviceBias();
+  float *getWeightGrad();
+  float *getInputGrad();
+  float *getBiasGrad();
+  float *getOutputGrad();
 
 private:
   int input_size, output_size;

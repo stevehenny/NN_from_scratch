@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cmath>
-#include <cudaKernels.cuh>
+#include <CudaChecks.cuh>
+#include <LayerClasses.cuh>
 #include <gtest/gtest.h>
 #include <numeric>
 #include <vector>
@@ -173,4 +174,77 @@ TEST(CudaKernelTests, test_conv3d_1d_launch) {
   cudaFree(d_input_image);
   cudaFree(d_output_image);
   cudaFree(d_kernels);
+}
+
+TEST(CudaKernelTests, test_mlpLayer_computeGradients_and_backProp) {
+  const int input_size = 3;
+  const int output_size = 2;
+
+  // Construct layer
+  mlpLayer layer(input_size, output_size);
+
+  // Host input: x = [1.0, 2.0, 3.0]
+  std::vector<float> h_input = {1.0f, 2.0f, 3.0f};
+  std::vector<float> h_dL_dy = {0.1f,
+                                -0.2f}; // example gradient from next layer
+
+  // Allocate and copy input to device
+  float *d_input, *d_dL_dy;
+  cudaCheck(cudaMalloc(&d_input, input_size * sizeof(float)));
+  cudaCheck(cudaMalloc(&d_dL_dy, output_size * sizeof(float)));
+
+  cudaCheck(cudaMemcpy(d_input, h_input.data(), input_size * sizeof(float),
+                       cudaMemcpyHostToDevice));
+  cudaCheck(cudaMemcpy(d_dL_dy, h_dL_dy.data(), output_size * sizeof(float),
+                       cudaMemcpyHostToDevice));
+
+  // Forward pass
+  float *d_output;
+  cudaCheck(cudaMalloc(&d_output, output_size * sizeof(float)));
+  layer.forward(d_input, d_output);
+  layer.ReLU(d_output); // Apply ReLU to simulate activation
+
+  // Call computeGradients
+  layer.computeGradients(d_input, d_dL_dy);
+
+  // Retrieve gradients from device to check correctness
+  std::vector<float> h_dL_dW(input_size * output_size);
+  std::vector<float> h_dL_db(output_size);
+  std::vector<float> h_dL_dx(input_size);
+
+  cudaCheck(cudaMemcpy(h_dL_dW.data(), layer.getWeightGrad(),
+                       input_size * output_size * sizeof(float),
+                       cudaMemcpyDeviceToHost));
+  cudaCheck(cudaMemcpy(h_dL_db.data(), layer.getBiasGrad(), output_size * sizeof(float),
+                       cudaMemcpyDeviceToHost));
+  cudaCheck(cudaMemcpy(h_dL_dx.data(), layer.backProp(d_input, d_dL_dy, 0.1f),
+                       input_size * sizeof(float), cudaMemcpyDeviceToHost));
+
+  // Check shapes and simple consistency
+  for (float v : h_dL_db) {
+    EXPECT_TRUE(std::isfinite(v)); // should be numbers
+  }
+
+  for (float v : h_dL_dx) {
+    EXPECT_TRUE(std::isfinite(v)); // should be numbers
+  }
+
+  for (float v : h_dL_dW) {
+    EXPECT_TRUE(std::isfinite(v)); // should be numbers
+  }
+
+  // Optional: Check bias was updated (forward bias - alpha * grad_bias)
+  std::vector<float> h_bias_updated(output_size);
+  cudaCheck(cudaMemcpy(h_bias_updated.data(), layer.getDeviceBias(),
+                       output_size * sizeof(float), cudaMemcpyDeviceToHost));
+
+  for (int i = 0; i < output_size; ++i) {
+    float expected = layer.getHostBias()[i] - 0.1f * h_dL_db[i]; // bias gradient applied
+    EXPECT_NEAR(h_bias_updated[i], expected, 1e-3)
+        << "Mismatch in updated bias at " << i;
+  }
+
+  cudaFree(d_input);
+  cudaFree(d_dL_dy);
+  cudaFree(d_output);
 }

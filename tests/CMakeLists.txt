@@ -20,6 +20,8 @@ add_executable(
   cuda_kernel_tests.cu
 )
 
+
+
 target_link_libraries(
   hello_test
   GTest::gtest_main
@@ -28,8 +30,12 @@ target_link_libraries(
 
 target_link_libraries(
   cuda_kernel_tests
+  PRIVATE 
+  Layers 
+  CudaKernels
   GTest::gtest_main
 )
+
 
 include(GoogleTest)
 gtest_discover_tests(hello_test)

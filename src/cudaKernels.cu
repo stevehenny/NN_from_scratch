@@ -1,4 +1,4 @@
-#include "cudaKernels.cuh"
+#define BLOCK_SIZE 16
 #define TILE_WIDTH BLOCK_SIZE
 #define SHARED_ROWS (TILE_WIDTH + KERNEL_SIZE - 1)
 #define SHARED_COLS (TILE_WIDTH + KERNEL_SIZE - 1)
@@ -86,14 +86,18 @@ __global__ void Convolution3D(float *A, float *B, float *C, int HA, int WA,
     B[out_channel * HB * WB + out_row * WB + out_col] = tmp;
   }
 }
+
 __global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
                           int input_channels) {
-  int out_col = blockIdx.x * blockDim.x + threadIdx.x;
-  int out_row = blockIdx.y * blockDim.y + threadIdx.y;
-  int input_channel = blockIdx.z;
+  int out_index = blockIdx.x * blockDim.x + threadIdx.x;
 
-  if (out_row >= HB || out_col >= WB)
-    return; // bounds check
+  int total_outputs = HB * WB * input_channels;
+  if (out_index >= total_outputs)
+    return;
+
+  int out_row = (out_index / WB) % HB;
+  int out_col = out_index % WB;
+  int input_channel = out_index / (HB * WB);
 
   int in_row = out_row * 2;
   int in_col = out_col * 2;
@@ -116,17 +120,15 @@ __global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
 
 // Kernel for Conv layers
 __global__ void ReLU_kernel(float *B, int HB, int WB, int channels) {
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  int total_elements = HB * WB * channels;
 
-  int col = blockIdx.x * blockDim.x + threadIdx.x;
-  int row = blockIdx.y * blockDim.y + threadIdx.y;
-  int input_channel = blockIdx.z;
-
-  if (row >= HB || col >= WB)
+  if (tid >= total_elements)
     return;
 
-  if (B[row * WB + col + input_channel * WB * HB] < 0) {
-    B[row * WB + col + input_channel * WB * HB] = 0;
-  }
+  float &val = B[tid];
+  if (val < 0.0f)
+    val = 0.0f;
 }
 
 // different kernel for MLP layers
@@ -347,7 +349,6 @@ __global__ void transposeKernel(float *A, float *B, int HA, int WA) {
   }
 }
 
-template <const size_t shared_A>
 __global__ void Convolution3D_1d_launch(float *A, float *B, float *C, int HA,
                                         int WA, int HB, int WB, int HC, int WC,
                                         int input_channels,
