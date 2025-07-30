@@ -1,5 +1,6 @@
 #include "CudaChecks.cuh"
 #include "LayerClasses.cuh"
+#include "cudaKernels.cuh"
 #include <cstdlib>
 #include <iostream>
 #include <random>
@@ -278,38 +279,21 @@ float *mlpLayer::backProp(float *d_input, float *dL_dy, float alpha) {
   return dL_dx; // return input_grad pointer for next layer to use
 }
 
-float *mlpLayer::getHostWeights(){
-  return weights;
-}
+float *mlpLayer::getHostWeights() { return weights; }
 
-float *mlpLayer::getHostBias(){
-  return bias;
-}
+float *mlpLayer::getHostBias() { return bias; }
 
-float *mlpLayer::getDeviceWeights(){
-  return d_weights;
-}
+float *mlpLayer::getDeviceWeights() { return d_weights; }
 
-float *mlpLayer::getDeviceBias(){
-  return d_bias;
-}
+float *mlpLayer::getDeviceBias() { return d_bias; }
 
-float *mlpLayer::getWeightGrad(){
-  return dL_dW;
-}
+float *mlpLayer::getWeightGrad() { return dL_dW; }
 
+float *mlpLayer::getInputGrad() { return dL_dx; }
 
-float *mlpLayer::getInputGrad(){
-  return dL_dx;
-}
+float *mlpLayer::getBiasGrad() { return dL_db; }
 
-float *mlpLayer::getBiasGrad(){
-  return dL_db;
-}
-
-float *mlpLayer::getOutputGrad(){
-  return dL_dz;
-}
+float *mlpLayer::getOutputGrad() { return dL_dz; }
 
 SoftmaxLayer::SoftmaxLayer(int input_size, int output_size)
     : input_size(input_size), output_size(output_size) {

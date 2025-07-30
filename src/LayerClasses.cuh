@@ -1,6 +1,5 @@
 #pragma once
 #include <cstdint>
-#include <cudaKernels.cuh>
 
 #define KERNEL_SIZE 3
 #define IMAGE_SIZE 28
