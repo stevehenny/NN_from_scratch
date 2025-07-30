@@ -1,21 +1,59 @@
-#ifndef NETWORK_H
-#define NETWORK_H
+#pragma once
+#include "CudaChecks.cuh"
+#include "LayerClasses.cuh"
+#include <memory>
+#include <type_traits>
+#include <utility>
+#include <vector>
 
-#include <cstdint>
-#include <sys/types.h>
+// Base class for all layers
+
 class Network {
 public:
-  Network(int depth, int height, int width, int layer1_filters,
-          int layer2_filters, int layer3_filters, int filter_size,
-          int batch_size = 64);
-  ~Network();
+  // Main constructor: accepts arbitrary number of things
+  template <typename... Args> Network(Args &&...args) {
+    addLayers(std::forward<Args>(args)...);
+    for (auto &layer : layers) {
+      float *d_out = nullptr;
+      int num_outputs = layer->getNumOutputs();
+      cudaCheck(cudaMalloc(&d_out, num_outputs * sizeof(float)));
+      d_pointers.push_back(d_out);
+    }
+  }
+
+  ~Network() {
+    for (auto ptr : d_pointers) {
+      cudaCheck(cudaFree(ptr));
+    }
+  }
+  void forward(float *d_input_image) {}
 
 private:
-  int depth, height, width, layer1_filters, layer2_filters, layer3_filters,
-      filter_size, batch_size;
+  std::vector<std::unique_ptr<Layer>> layers;
+  std::vector<float *> d_pointers;
 
-  uint8_t *layer1_channels; //  (height, width, depth)
-  uint8_t *layer2_channels; //  (height, width, depth)
+  // Base case for recursion
+  void addLayers() {}
+
+  // Overload for raw pointer to a Layer
+  template <typename T,
+            typename = std::enable_if_t<std::is_base_of<Layer, T>::value>>
+  void addLayers(T *ptr) {
+    layers.emplace_back(ptr); // take ownership
+  }
+
+  // Overload for derived Layer rvalues or lvalues (objects)
+  template <typename T, typename = std::enable_if_t<
+                            std::is_base_of<Layer, std::decay_t<T>>::value>>
+  void addLayers(T &&layer) {
+    layers.emplace_back(
+        std::make_unique<std::decay_t<T>>(std::forward<T>(layer)));
+  }
+
+  // Recursive case to handle multiple arguments
+  template <typename First, typename... Rest>
+  void addLayers(First &&first, Rest &&...rest) {
+    addLayers(std::forward<First>(first));
+    addLayers(std::forward<Rest>(rest)...);
+  }
 };
-
-#endif // NETWORK_H

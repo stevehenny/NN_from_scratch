@@ -1,7 +1,6 @@
 #include "LoadData.h"
 #include <stddef.h>
 #include <stdio.h>
-
 #define IDX_LABEL_HEADER_SIZE 8
 #define IDX_IMAGE_HEADER_SIZE 16
 

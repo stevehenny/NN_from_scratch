@@ -8,23 +8,23 @@
 
 // CUDA kernel declarations
 
-__global__ void Convolution(float *A, float *B, float *C, int HA, int WA,
-                            int HB, int WB, int HC, int WC,
-                            int input_channels, int output_channels);
+__global__ void convolution(float *a, float *b, float *c, int ha, int wa,
+                            int hb, int wb, int hc, int wc, int input_channels,
+                            int output_channels);
 
-__global__ void Convolution3D(float *A, float *B, float *C, int HA, int WA,
-                              int HB, int WB, int HC, int WC,
+__global__ void convolution3d(float *a, float *b, float *c, int ha, int wa,
+                              int hb, int wb, int hc, int wc,
                               int input_channels, int output_channels);
 
-__global__ void maxPool2D(float *A, float *B, int HA, int WA, int HB, int WB,
-                          int input_channels);
+__global__ void max_pool2d(float *a, float *b, int ha, int wa, int hb, int wb,
+                           int input_channels);
 
-__global__ void ReLU_kernel(float *B, int HB, int WB, int channels);
+__global__ void relu_kernel(float *b, int hb, int wb, int channels);
 
-__global__ void ReLU_kernel(float *B, int N);
+__global__ void relu_kernel(float *b, int n);
 
-__global__ void sgemm(float *A, float *B, float *C, int HA, int WA, int HB,
-                      int WB, int HC, int WC);
+__global__ void sgemm(float *a, float *b, float *c, int ha, int wa, int hb,
+                      int wb, int hc, int wc);
 
 template <const int block_size>
 __global__ void sgemm_1d(float *A, float *B, float *C, int HA, int WA, int HB,
@@ -76,41 +76,42 @@ __global__ void sgemm_1d(float *A, float *B, float *C, int HA, int WA, int HB,
   }
 }
 
-__global__ void vecAdd(float *A_vec, float *B_vec, bool neg, int len);
+__global__ void vec_add(float *a_vec, float *b_vec, bool neg, int len);
 
-__global__ void matAdd(float *A, float *B, float *C, int rows, int cols,
-                       bool neg, float alpha);
+__global__ void mat_add(float *a, float *b, float *c, int rows, int cols,
+                        bool neg, float alpha);
 
-__global__ void softmaxKernel(const float *input, float *output, int len);
+__global__ void softmax_kernel(const float *input, float *output, int len);
 
-__device__ __host__ float computeCrossEntropyLoss(float *d_output,
-                                                  float *d_target, int length);
+__device__ __host__ float
+compute_cross_entropy_loss(float *d_output, float *d_target, int length);
 
-__device__ __host__ float computeCrossEntropyFromLogits(const float *logits,
-                                                        int target_class,
-                                                        int length);
+__device__ __host__ float compute_cross_entropy_from_logits(const float *logits,
+                                                            int target_class,
+                                                            int length);
 
-__global__ void softmaxCrossEntropyBackward(float *softmax_output, float *label,
-                                            float *grad_output, int length);
+__global__ void softmax_cross_entropy_backward(float *softmax_output,
+                                               float *label, float *grad_output,
+                                               int length);
 
-__global__ void outerProduct(float *d_out, float *input, float *dW,
-                             int out_size, int in_size);
+__global__ void outer_product(float *d_out, float *input, float *d_w,
+                              int out_size, int in_size);
 
-__global__ void reluBackward(float *input, float *grad_output,
-                             float *grad_input, int size);
+__global__ void relu_backward(float *input, float *grad_output,
+                              float *grad_input, int size);
 
-__global__ void maxPoolBackward(float *d_out, int *max_indices, float *d_input,
-                                int size);
+__global__ void max_pool_backward(float *d_out, int *max_indices,
+                                  float *d_input, int size);
 
-__global__ void sgdUpdate(float *weights, float *grad, float lr, int size);
+__global__ void sgd_update(float *weights, float *grad, float lr, int size);
 
-__global__ void tensorElementwiseMult(float *A, float *B, float *C,
-                                      int totalElements);
+__global__ void tensor_elementwise_mult(float *a, float *b, float *c,
+                                        int total_elements);
 
-__global__ void transposeKernel(float *A, float *B, int HA, int WA);
+__global__ void transpose_kernel(float *a, float *b, int ha, int wa);
 
-__global__ void Convolution3D_1d_launch(float *A, float *B, float *C, int HA,
-                                        int WA, int HB, int WB, int HC, int WC,
+__global__ void convolution3d_1d_launch(float *a, float *b, float *c, int ha,
+                                        int wa, int hb, int wb, int hc, int wc,
                                         int input_channels,
                                         int output_channels);
 

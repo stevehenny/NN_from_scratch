@@ -72,27 +72,27 @@ int main(int argc, char *argv[]) {
   }
 
   // Initialize conv layers
-  convLayer layer1 = convLayer(
+  ConvLayer layer1 = ConvLayer(
       ImageSize(rows, cols), ImageSize(out_rows, out_cols),
       ImageSize(kernel_size, kernel_size), input_channels, output_channels);
 
-  maxPool poolLayer1 =
-      maxPool(out_rows, out_cols, out_rows / 2, out_cols / 2, output_channels);
+  MaxPool poolLayer1 =
+      MaxPool(out_rows, out_cols, out_rows / 2, out_cols / 2, output_channels);
 
-  convLayer layer2(
+  ConvLayer layer2(
       ImageSize(pool_rows, pool_cols), ImageSize(out2_rows, out2_cols),
       ImageSize(kernel_size, kernel_size), output_channels, conv2_out_channels);
-  maxPool pool2(out2_rows, out2_cols, pool2_rows, pool2_cols,
+  MaxPool pool2(out2_rows, out2_cols, pool2_rows, pool2_cols,
                 conv2_out_channels);
 
-  mlpLayer hidden_layer(pool2_cols * pool2_rows * conv2_out_channels,
+  MlpLayer hidden_layer(pool2_cols * pool2_rows * conv2_out_channels,
                         hidden_layer_nodes);
-  mlpLayer output_layer(hidden_layer_nodes, output_layer_nodes);
+  MlpLayer output_layer(hidden_layer_nodes, output_layer_nodes);
   SoftmaxLayer softmax_layer(output_layer_nodes, output_layer_nodes);
-  float *input_image = getInputImage(normalized_images, 0);
+  float *input_image = getInputImage(normalized_images, 40010);
   float *output_image = (float *)malloc(
       output_channels * output_size_per_channel * sizeof(float));
-  float *output_maxPool;
+  float *output_MaxPool;
   float *softmax_output;
   float *label_output;
   // init label_outputs
@@ -105,7 +105,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  output_maxPool =
+  output_MaxPool =
       (float *)malloc(output_channels * pool_rows * pool_cols * sizeof(float));
   softmax_output = (float *)malloc(output_layer_nodes * sizeof(float));
   float *debug_softmax_input =
@@ -122,85 +122,85 @@ int main(int argc, char *argv[]) {
 
   int *d_max_ind_pool1, *d_max_ind_pool2;
 
-  cudaCheck(cudaMalloc((void **)&d_input_image,
-                       input_channels * rows * cols * sizeof(float)));
-  cudaCheck(cudaMalloc((void **)&d_output_conv1,
-                       output_channels * out_rows * out_cols * sizeof(float)));
-  cudaCheck(
+  cuda_check(cudaMalloc((void **)&d_input_image,
+                        input_channels * rows * cols * sizeof(float)));
+  cuda_check(cudaMalloc((void **)&d_output_conv1,
+                        output_channels * out_rows * out_cols * sizeof(float)));
+  cuda_check(
       cudaMalloc((void **)&d_output_pool1,
                  output_channels * pool_rows * pool_cols * sizeof(float)));
-  cudaCheck(cudaMalloc((void **)&d_max_ind_pool1,
-                       pool_rows * pool_cols * sizeof(int)));
-  cudaCheck(
+  cuda_check(cudaMalloc((void **)&d_max_ind_pool1,
+                        pool_rows * pool_cols * sizeof(int)));
+  cuda_check(
       cudaMalloc((void **)&d_output_conv2,
                  conv2_out_channels * out2_rows * out2_cols * sizeof(float)));
-  cudaCheck(
+  cuda_check(
       cudaMalloc((void **)&d_output_pool2,
                  conv2_out_channels * pool2_rows * pool2_cols * sizeof(float)));
-  cudaCheck(cudaMalloc((void **)&d_max_ind_pool2,
-                       pool2_rows * pool2_cols * sizeof(int)));
-  cudaCheck(
+  cuda_check(cudaMalloc((void **)&d_max_ind_pool2,
+                        pool2_rows * pool2_cols * sizeof(int)));
+  cuda_check(
       cudaMalloc((void **)&d_hidden_layer, hidden_layer_nodes * sizeof(float)));
-  cudaCheck(
+  cuda_check(
       cudaMalloc((void **)&d_output_layer, output_layer_nodes * sizeof(float)));
-  cudaCheck(
+  cuda_check(
       cudaMalloc((void **)&d_softmax, output_layer_nodes * sizeof(float)));
-  cudaCheck(
+  cuda_check(
       cudaMalloc((void **)&d_label_output, output_layer_nodes * sizeof(float)));
 
-  cudaCheck(cudaMemcpy(d_input_image, input_image,
-                       input_channels * cols * rows * sizeof(float),
-                       cudaMemcpyHostToDevice));
-  cudaCheck(cudaMemcpy(d_label_output, label_output,
-                       sizeof(float) * output_layer_nodes,
-                       cudaMemcpyHostToDevice));
+  cuda_check(cudaMemcpy(d_input_image, input_image,
+                        input_channels * cols * rows * sizeof(float),
+                        cudaMemcpyHostToDevice));
+  cuda_check(cudaMemcpy(d_label_output, label_output,
+                        sizeof(float) * output_layer_nodes,
+                        cudaMemcpyHostToDevice));
   // Run forward pass
   d_output_conv1 = layer1.forward(d_input_image, d_output_conv1);
-  layer1.ReLU(d_output_conv1);
+  layer1.relu(d_output_conv1);
   d_output_pool1 =
       poolLayer1.forward(d_output_conv1, d_output_pool1, d_max_ind_pool2);
   d_output_conv2 = layer2.forward(d_output_pool1, d_output_conv2);
-  layer2.ReLU(d_output_conv2);
+  layer2.relu(d_output_conv2);
   d_output_pool2 =
       pool2.forward(d_output_conv2, d_output_pool2, d_max_ind_pool2);
   d_hidden_layer = hidden_layer.forward(d_output_pool2, d_hidden_layer);
-  cudaCheck(cudaMemcpy(relu_before, d_hidden_layer,
-                       hidden_layer_nodes * sizeof(float),
-                       cudaMemcpyDeviceToHost));
-  hidden_layer.ReLU(d_hidden_layer);
+  cuda_check(cudaMemcpy(relu_before, d_hidden_layer,
+                        hidden_layer_nodes * sizeof(float),
+                        cudaMemcpyDeviceToHost));
+  hidden_layer.relu(d_hidden_layer);
 
-  cudaCheck(cudaMemcpy(relu_after, d_hidden_layer,
-                       hidden_layer_nodes * sizeof(float),
-                       cudaMemcpyDeviceToHost));
+  cuda_check(cudaMemcpy(relu_after, d_hidden_layer,
+                        hidden_layer_nodes * sizeof(float),
+                        cudaMemcpyDeviceToHost));
   d_output_layer = output_layer.forward(d_hidden_layer, d_output_layer);
-  softmax_layer.softMax(d_output_layer, d_softmax);
-  float Loss = softmax_layer.computeLoss(d_softmax, d_label_output);
+  softmax_layer.softmax(d_output_layer, d_softmax);
+  float Loss = softmax_layer.compute_loss(d_softmax, d_label_output);
 
   // copy back to host
-  cudaCheck(cudaMemcpy(output_image, d_output_conv1,
-                       output_channels * out_cols * out_rows * sizeof(float),
-                       cudaMemcpyDeviceToHost));
+  cuda_check(cudaMemcpy(output_image, d_output_conv1,
+                        output_channels * out_cols * out_rows * sizeof(float),
+                        cudaMemcpyDeviceToHost));
 
-  cudaCheck(cudaMemcpy(output_maxPool, d_output_pool1,
-                       output_channels * pool_rows * pool_cols * sizeof(float),
-                       cudaMemcpyDeviceToHost));
-  cudaCheck(cudaMemcpy(softmax_output, d_softmax,
-                       output_layer_nodes * sizeof(float),
-                       cudaMemcpyDeviceToHost));
-  cudaCheck(cudaMemcpy(debug_softmax_input, d_output_layer,
-                       output_layer_nodes * sizeof(float),
-                       cudaMemcpyDeviceToHost));
-  cudaCheck(cudaFree(d_input_image));
-  cudaCheck(cudaFree(d_output_conv1));
-  cudaCheck(cudaFree(d_output_pool1));
-  cudaCheck(cudaFree(d_output_conv2));
-  cudaCheck(cudaFree(d_output_pool2));
-  cudaCheck(cudaFree(d_hidden_layer));
-  cudaCheck(cudaFree(d_output_layer));
-  cudaCheck(cudaFree(d_softmax));
-  cudaCheck(cudaFree(d_max_ind_pool1));
-  cudaCheck(cudaFree(d_max_ind_pool2));
-  cudaCheck(cudaFree(d_label_output));
+  cuda_check(cudaMemcpy(output_MaxPool, d_output_pool1,
+                        output_channels * pool_rows * pool_cols * sizeof(float),
+                        cudaMemcpyDeviceToHost));
+  cuda_check(cudaMemcpy(softmax_output, d_softmax,
+                        output_layer_nodes * sizeof(float),
+                        cudaMemcpyDeviceToHost));
+  cuda_check(cudaMemcpy(debug_softmax_input, d_output_layer,
+                        output_layer_nodes * sizeof(float),
+                        cudaMemcpyDeviceToHost));
+  cuda_check(cudaFree(d_input_image));
+  cuda_check(cudaFree(d_output_conv1));
+  cuda_check(cudaFree(d_output_pool1));
+  cuda_check(cudaFree(d_output_conv2));
+  cuda_check(cudaFree(d_output_pool2));
+  cuda_check(cudaFree(d_hidden_layer));
+  cuda_check(cudaFree(d_output_layer));
+  cuda_check(cudaFree(d_softmax));
+  cuda_check(cudaFree(d_max_ind_pool1));
+  cuda_check(cudaFree(d_max_ind_pool2));
+  cuda_check(cudaFree(d_label_output));
   // Save the input image to a binary file
   saveToFile(input_image, imageSize, "input_bin");
 
@@ -208,7 +208,7 @@ int main(int argc, char *argv[]) {
   saveToFile(output_image, output_channels * output_size_per_channel,
              "output_bin");
 
-  saveToFile(output_maxPool, output_channels * pool_rows * pool_cols,
+  saveToFile(output_MaxPool, output_channels * pool_rows * pool_cols,
              "pool_bin");
 
   // Print results
@@ -246,7 +246,7 @@ int main(int argc, char *argv[]) {
   free(labels);
   free(normalized_images);
   free(output_image);
-  free(output_maxPool);
+  free(output_MaxPool);
   free(softmax_output);
   free(label_output);
   free(debug_softmax_input);

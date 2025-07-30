@@ -2,7 +2,7 @@
 #define CUDA_CHECK_H
 #include <iostream>
 
-#define cudaCheck(stmt)                                                        \
+#define cuda_check(stmt)                                                       \
   do {                                                                         \
     cudaError_t err = stmt;                                                    \
     if (err != cudaSuccess) {                                                  \
