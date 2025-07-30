@@ -16,6 +16,7 @@ struct ImageSize {
 class Layer {
 public:
   virtual ~Layer();
+  virtual int get_num_outputs() = 0;
 };
 
 #endif
@@ -27,7 +28,7 @@ public:
             uint8_t output_channels);
   ~ConvLayer();
   float *forward(float *d_input_image, float *d_output_image);
-  int get_num_outputs();
+  int get_num_outputs() override;
   void relu(float *b);
 
 private:
@@ -46,7 +47,7 @@ private:
 class MaxPool : public Layer {
 public:
   MaxPool(int ha, int wa, int hb, int wb, int input_channels);
-  int get_num_outputs();
+  int get_num_outputs() override;
   float *forward(float *d_input, float *d_output, int *d_max_ind);
   float *back_prop(float alpha);
 
@@ -60,7 +61,7 @@ class MlpLayer : public Layer {
 public:
   MlpLayer(int input_size, int output_size);
   ~MlpLayer();
-  int get_num_outputs();
+  int get_num_outputs() override;
   float *forward(float *d_input, float *d_output);
   void relu(float *d_input);
   void compute_gradients(float *d_input, float *dl_dy);
@@ -90,7 +91,7 @@ class SoftmaxLayer : public Layer {
 public:
   SoftmaxLayer(int input_size, int output_size);
   ~SoftmaxLayer();
-  int get_num_outputs();
+  int get_num_outputs() override;
   void softmax(float *d_input, float *d_output);
   float compute_loss(float *d_y_hat, float *d_y);
   float *back_prop(float *d_y_hat, float *d_y, float alpha);

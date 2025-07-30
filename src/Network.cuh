@@ -15,15 +15,15 @@ public:
     addLayers(std::forward<Args>(args)...);
     for (auto &layer : layers) {
       float *d_out = nullptr;
-      int num_outputs = layer->getNumOutputs();
-      cudaCheck(cudaMalloc(&d_out, num_outputs * sizeof(float)));
+      int num_outputs = layer->get_num_outputs();
+      cuda_check(cudaMalloc(&d_out, num_outputs * sizeof(float)));
       d_pointers.push_back(d_out);
     }
   }
 
   ~Network() {
     for (auto ptr : d_pointers) {
-      cudaCheck(cudaFree(ptr));
+      cuda_check(cudaFree(ptr));
     }
   }
   void forward(float *d_input_image) {}

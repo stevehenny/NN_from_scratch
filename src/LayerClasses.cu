@@ -57,13 +57,6 @@ ConvLayer::~ConvLayer() {
 int ConvLayer::get_num_outputs() { return output_channels * hb * wb; }
 
 float *ConvLayer::forward(float *d_input_image, float *d_output_image) {
-  int tile_output_width = BLOCK_SIZE - wc + 1;
-  int tile_output_height = BLOCK_SIZE - hc + 1;
-
-  int tile_width = wc + 1;
-  int tile_height = hc + 1;
-  int shared_mem_bytes = tile_width * tile_height * sizeof(float);
-
   int total_outputs = output_channels * hb * wb;
   int threads_per_block = 256;
   int num_blocks = (total_outputs + threads_per_block - 1) / threads_per_block;
