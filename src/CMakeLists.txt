@@ -2,7 +2,7 @@
 add_library(LoadData STATIC LoadData.cpp)
 
 add_library(Layers STATIC
-  LayerClasses.cu
+  LayerClasses.cu Network.cu
 )
 
 add_library(CudaKernels STATIC cudaKernels.cu)

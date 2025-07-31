@@ -74,6 +74,10 @@ void ConvLayer::forward(float *d_input_image, float *d_output_image) {
   cuda_check(cudaDeviceSynchronize());
 }
 
+//TODO: Define this back_prop method. This is a place holder override for the Layer 
+// virtual method
+void ConvLayer::back_prop(float *d_input, float *d_grad_output, float alpha){}
+
 void ConvLayer::relu(float *b) {
   int total_elements = output_channels * wb * hb;
   int threads_per_block = 256;
@@ -105,6 +109,10 @@ void MaxPool::forward(float *d_input, float *d_output, int *d_max_ind) {
   cuda_check(cudaPeekAtLastError());
   cuda_check(cudaDeviceSynchronize());
 }
+
+
+// TODO Define this method for conv layers
+void MaxPool::back_prop(float *d_input, float *d_grad_output, float alpha){}
 
 // MlpLayer
 
@@ -224,7 +232,7 @@ void MlpLayer::compute_gradients(float *d_input, float *dl_dy) {
   cuda_check(cudaDeviceSynchronize());
 }
 
-float *MlpLayer::back_prop(float *d_input, float *dl_dy, float alpha) {
+void MlpLayer::back_prop(float *d_input, float *dl_dy, float alpha) {
   compute_gradients(d_input, dl_dy);
   bool neg = true;
 
@@ -240,7 +248,7 @@ float *MlpLayer::back_prop(float *d_input, float *dl_dy, float alpha) {
                                                   output_size, neg, alpha);
   cuda_check(cudaDeviceSynchronize());
 
-  return dl_dx;
+  // return dl_dx;
 }
 
 float *MlpLayer::get_host_weights() { return weights; }
@@ -288,14 +296,13 @@ void SoftmaxLayer::forward(float *d_y_hat, float *d_y) {
   cudaMemcpy(d_loss, h_loss, sizeof(float), cudaMemcpyHostToDevice);
 }
 
-float *SoftmaxLayer::back_prop(float *d_y_hat, float *d_y, float alpha) {
+void SoftmaxLayer::back_prop(float *d_y_hat, float *d_y, float alpha) {
   int threads_per_block = 256;
   int blocks_per_grid =
       (output_size + threads_per_block - 1) / threads_per_block;
   vec_add<<<blocks_per_grid, threads_per_block>>>(d_y_hat, d_y, true,
                                                   output_size);
   cuda_check(cudaDeviceSynchronize());
-  return d_y_hat;
 }
 float SoftmaxLayer::get_loss(){
   return *h_loss;

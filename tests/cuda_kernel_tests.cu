@@ -1,7 +1,7 @@
 #include <CudaChecks.cuh>
 #include <LayerClasses.cuh>
-#include <cudaKernels.cuh>
 #include <algorithm>
+#include <cudaKernels.cuh>
 #include <gtest/gtest.h>
 #include <numeric>
 #include <vector>
@@ -16,7 +16,8 @@ void reference_gemm(const float *a, const float *b, float *c, int ha, int wa,
       float sum = 0.0f;
       for (int k = 0; k < wa; ++k) {
         sum += a[i * wa + k] * b[k * wb + j];
-      } c[i * wb + j] = sum;
+      }
+      c[i * wb + j] = sum;
     }
   }
 }
@@ -69,18 +70,22 @@ TEST(CudaKernelTests, test_sgemm) {
   cudaMalloc(&d_b, h_b.size() * sizeof(float));
   cudaMalloc(&d_c, h_c.size() * sizeof(float));
 
-  cudaMemcpy(d_a, h_a.data(), h_a.size() * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(d_b, h_b.data(), h_b.size() * sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_a, h_a.data(), h_a.size() * sizeof(float),
+             cudaMemcpyHostToDevice);
+  cudaMemcpy(d_b, h_b.data(), h_b.size() * sizeof(float),
+             cudaMemcpyHostToDevice);
 
   dim3 dim_block(block_size * block_size);
   int tiles_x = (wc + block_size - 1) / block_size;
   int tiles_y = (hc + block_size - 1) / block_size;
   dim3 dim_grid(tiles_x * tiles_y);
 
-  sgemm_1d<block_size><<<dim_grid, dim_block>>>(d_a, d_b, d_c, ha, wa, hb, wb, hc, wc);
+  sgemm_1d<block_size>
+      <<<dim_grid, dim_block>>>(d_a, d_b, d_c, ha, wa, hb, wb, hc, wc);
   cudaDeviceSynchronize();
 
-  cudaMemcpy(h_c.data(), d_c, h_c.size() * sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(h_c.data(), d_c, h_c.size() * sizeof(float),
+             cudaMemcpyDeviceToHost);
   reference_gemm(h_a.data(), h_b.data(), h_c_expected.data(), ha, wa, wb);
 
   const float eps = 1e-4;
@@ -120,8 +125,10 @@ TEST(CudaKernelTests, test_conv3d_1d_launch) {
   cudaMalloc(&d_kernels, kernel_size * sizeof(float));
   cudaMalloc(&d_output_image, output_size * sizeof(float));
 
-  cudaMemcpy(d_input_image, h_input_image.data(), input_size * sizeof(float), cudaMemcpyHostToDevice);
-  cudaMemcpy(d_kernels, h_kernels.data(), kernel_size * sizeof(float), cudaMemcpyHostToDevice);
+  cudaMemcpy(d_input_image, h_input_image.data(), input_size * sizeof(float),
+             cudaMemcpyHostToDevice);
+  cudaMemcpy(d_kernels, h_kernels.data(), kernel_size * sizeof(float),
+             cudaMemcpyHostToDevice);
 
   int total_outputs = output_channels * hb * wb;
   int threads_per_block = 256;
@@ -133,7 +140,8 @@ TEST(CudaKernelTests, test_conv3d_1d_launch) {
 
   cudaDeviceSynchronize();
 
-  cudaMemcpy(h_output_image.data(), d_output_image, output_size * sizeof(float), cudaMemcpyDeviceToHost);
+  cudaMemcpy(h_output_image.data(), d_output_image, output_size * sizeof(float),
+             cudaMemcpyDeviceToHost);
 
   const float eps = 1e-4;
   for (int i = 0; i < output_size; ++i) {
@@ -159,8 +167,10 @@ TEST(CudaKernelTests, test_mlp_layer_compute_gradients_and_backprop) {
   cuda_check(cudaMalloc(&d_input, input_size * sizeof(float)));
   cuda_check(cudaMalloc(&d_dL_dy, output_size * sizeof(float)));
 
-  cuda_check(cudaMemcpy(d_input, h_input.data(), input_size * sizeof(float), cudaMemcpyHostToDevice));
-  cuda_check(cudaMemcpy(d_dL_dy, h_dL_dy.data(), output_size * sizeof(float), cudaMemcpyHostToDevice));
+  cuda_check(cudaMemcpy(d_input, h_input.data(), input_size * sizeof(float),
+                        cudaMemcpyHostToDevice));
+  cuda_check(cudaMemcpy(d_dL_dy, h_dL_dy.data(), output_size * sizeof(float),
+                        cudaMemcpyHostToDevice));
 
   float *d_output;
   cuda_check(cudaMalloc(&d_output, output_size * sizeof(float)));
@@ -174,11 +184,12 @@ TEST(CudaKernelTests, test_mlp_layer_compute_gradients_and_backprop) {
   std::vector<float> h_dL_dx(input_size);
 
   cuda_check(cudaMemcpy(h_dL_dW.data(), layer.get_weight_grad(),
-                       input_size * output_size * sizeof(float), cudaMemcpyDeviceToHost));
+                        input_size * output_size * sizeof(float),
+                        cudaMemcpyDeviceToHost));
   cuda_check(cudaMemcpy(h_dL_db.data(), layer.get_bias_grad(),
-                       output_size * sizeof(float), cudaMemcpyDeviceToHost));
+                        output_size * sizeof(float), cudaMemcpyDeviceToHost));
   cuda_check(cudaMemcpy(h_dL_dx.data(), layer.back_prop(d_input, d_dL_dy, 0.1f),
-                       input_size * sizeof(float), cudaMemcpyDeviceToHost));
+                        input_size * sizeof(float), cudaMemcpyDeviceToHost));
 
   for (float v : h_dL_db) {
     EXPECT_TRUE(std::isfinite(v));
@@ -194,11 +205,12 @@ TEST(CudaKernelTests, test_mlp_layer_compute_gradients_and_backprop) {
 
   std::vector<float> h_bias_updated(output_size);
   cuda_check(cudaMemcpy(h_bias_updated.data(), layer.get_device_bias(),
-                       output_size * sizeof(float), cudaMemcpyDeviceToHost));
+                        output_size * sizeof(float), cudaMemcpyDeviceToHost));
 
   for (int i = 0; i < output_size; ++i) {
     float expected = layer.get_host_bias()[i] - 0.1f * h_dL_db[i];
-    EXPECT_NEAR(h_bias_updated[i], expected, 1e-3) << "Mismatch in updated bias at " << i;
+    EXPECT_NEAR(h_bias_updated[i], expected, 1e-3)
+        << "Mismatch in updated bias at " << i;
   }
 
   std::cout << "HELLO" << "\n";

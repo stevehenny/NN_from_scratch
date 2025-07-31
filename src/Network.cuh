@@ -12,28 +12,20 @@ using device_ptr = std::unique_ptr<float, CudaDeleter>;
 
 class Network {
 public:
-  Network(std::vector<std::unique_ptr<Layer>> &&layer_list)
-      : layers(std::move(layer_list)) {
-    // Allocate device memory for each layer's output
-    for (auto &layer : layers) {
-      float *d_out = nullptr;
-      int num_outputs = layer->get_num_outputs();
-      cuda_check(cudaMalloc(&d_out, num_outputs * sizeof(float)));
-      d_pointers.emplace_back(device_ptr(d_out));
-    }
-  }
-
-  // Prevent accidental copies
+  Network(std::vector<std::unique_ptr<Layer>> &&layer_list,
+          std::unique_ptr<SoftmaxLayer> &&softmax_layer);
+  // Prevent accidental copies:
+  // copies will copy pointers and those pointers will be double freed
   Network(const Network &) = delete;
   Network &operator=(const Network &) = delete;
 
-  // Allow moves
-  Network(Network &&) = default;
-  Network &operator=(Network &&) = default;
-
   ~Network() = default;
+
+  void forward(float *d_input, float *d_label);
+  float get_loss();
 
 private:
   std::vector<std::unique_ptr<Layer>> layers;
+  std::unique_ptr<SoftmaxLayer> softmax_layer;
   std::vector<device_ptr> d_pointers;
 };

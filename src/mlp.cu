@@ -6,6 +6,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <stdlib.h>
+#include <iostream>
 
 #define INPUT_IMAGE_ROWS 28
 #define INPUT_IMAGE_COLS 28
@@ -71,11 +72,14 @@ int main(int argc, char *argv[]) {
 Network mlp(make_layer_vector(
   std::make_unique<MlpLayer>(input_layer_nodes, input_layer_nodes),
   std::make_unique<MlpLayer>(input_layer_nodes, hidden_layer_nodes),
-  std::make_unique<MlpLayer>(hidden_layer_nodes, output_layer_nodes),
-  std::make_unique<SoftmaxLayer>(output_layer_nodes, output_layer_nodes)
-));
-
+  std::make_unique<MlpLayer>(hidden_layer_nodes, output_layer_nodes)
+),
+std::make_unique<SoftmaxLayer>(output_layer_nodes, output_layer_nodes)
+);
   float *input_image = getInputImage(normalized_images, 0);
+  float *d_input_image;
+  cuda_check(cudaMalloc(&d_input_image, input_layer_nodes * sizeof(float)));
+  cuda_check(cudaMemcpy(d_input_image, input_image, input_layer_nodes * sizeof(float), cudaMemcpyHostToDevice));
   float *label_output;
   // init label_outputs
   label_output = (float *)malloc(output_layer_nodes * sizeof(float));
@@ -87,10 +91,15 @@ Network mlp(make_layer_vector(
     }
   }
 
+  float *d_label;
+  cuda_check(cudaMalloc(&d_label, output_layer_nodes * sizeof(float));
+  cuda_check(cudaMemcpy(d_label, label_output, output_layer_nodes * sizeof(float), cudaMemcpyHostToDevice)));
   // Print results
   printf("Label: %d\n", labels[0]);
   printImage(input_image, rows, cols);
 
+  mlp.forward(d_input_image, d_label);
+  std::cout<< "Loss: " << mlp.get_loss() << "\n";
   int length = 10;
   float *output;
   // Cleanup

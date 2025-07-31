@@ -18,6 +18,7 @@ public:
   virtual ~Layer();
   virtual int get_num_outputs() = 0;
   virtual void forward(float *d_input, float *d_output) = 0;
+  virtual void back_prop(float *d_input, float *d_grad_output, float alpha) = 0;
 };
 
 #endif
@@ -29,6 +30,7 @@ public:
             uint8_t output_channels);
   ~ConvLayer();
   void forward(float *d_input_image, float *d_output_image) override;
+  void back_prop(float *d_input, float *d_grad_output, float alpha) override;
   int get_num_outputs() override;
   void relu(float *b);
 
@@ -53,7 +55,7 @@ public:
   int get_num_outputs() override;
   void forward(float *d_input, float *d_output) override;
   void forward(float *d_input, float *d_output, int *d_max_ind);
-  float *back_prop(float alpha);
+  void back_prop(float *d_input, float *d_grad_output, float alpha) override;
 
 private:
   int ha, wa, hb, wb, input_channels;
@@ -71,7 +73,7 @@ public:
   void forward(float *d_input, float *d_output) override;
   void relu(float *d_input);
   void compute_gradients(float *d_input, float *dl_dy);
-  float *back_prop(float *d_input, float *dl_dy, float alpha);
+  void back_prop(float *d_input, float *dl_dy, float alpha) override;
   float *get_host_weights();
   float *get_host_bias();
   float *get_device_weights();
@@ -102,7 +104,7 @@ public:
   int get_num_outputs() override;
   void softmax(float *d_input, float *d_output);
   void forward(float *d_y_hat, float *d_y) override;
-  float *back_prop(float *d_y_hat, float *d_y, float alpha);
+  void back_prop(float *d_y_hat, float *d_y, float alpha) override;
   float get_loss();
 
 private:

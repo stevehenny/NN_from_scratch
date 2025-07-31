@@ -1,20 +1,34 @@
+#include "LayerClasses.cuh"
 #include "Network.cuh"
+#include "gmock/gmock.h"
 
-Network::Network(int depth, int height, int width, int layer1_filters,
-                 int layer2_filters, int layer3_filters, int filter_size,
-                 int batch_size)
-    : depth(depth), height(height), width(width), batch_size(batch_size),
-      layer1_filters(layer1_filters), layer2_filters(layer2_filters),
-      layer3_filters(layer3_filters), filter_size(filter_size) {
-  size_t layer1_size = depth * height * width * batch_size;
-  size_t layer2_size = depth * (height - (filter_size - 1)) *
-                       (width - (filter_size - 1)) * layer1_filters *
-                       batch_size;
-  cudaMalloc((void **)&layer1_channels, layer1_size);
-  cudaMalloc((void **)&layer2_channels, layer2_size);
+Network::Network(std::vector<std::unique_ptr<Layer>> &&layer_list,
+                 std::unique_ptr<SoftmaxLayer> &&softmax_layer)
+    : layers(std::move(layer_list)), softmax_layer(std::move(softmax_layer)) {
+  // Allocate device memory for each layer's output
+  for (int i = 0; i < layers.size(); ++i) {
+    float *d_out = nullptr;
+    int num_outputs = layers[i]->get_num_outputs();
+    cuda_check(cudaMalloc(&d_out, num_outputs * sizeof(float)));
+    d_pointers.emplace_back(device_ptr(d_out));
+  }
+  // allocate another pointer for softmax_layer
+  float *d_out = nullptr;
+  int num_outputs = this->softmax_layer->get_num_outputs();
+  cuda_check(cudaMalloc(&d_out, num_outputs * sizeof(float)));
+  d_pointers.emplace_back(device_ptr(d_out));
 }
 
-Network::~Network() {
-  cudaFree(layer1_channels);
-  cudaFree(layer2_channels);
+void Network::forward(float *d_input, float *d_label) {
+  float *d_next_input = d_input;
+  for (int i = 0; i < layers.size(); ++i) {
+    layers[i]->forward(d_next_input, d_pointers[i].get());
+    d_next_input = d_pointers[i].get();
+  }
+
+  float *d_softmax_output = d_pointers[d_pointers.size() - 1].get();
+  this->softmax_layer->softmax(d_next_input, d_softmax_output);
+  this->softmax_layer->forward(d_softmax_output, d_label);
 }
+
+float Network::get_loss() { return this->softmax_layer->get_loss(); }
