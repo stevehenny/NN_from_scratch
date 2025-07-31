@@ -2,58 +2,38 @@
 #include "CudaChecks.cuh"
 #include "LayerClasses.cuh"
 #include <memory>
-#include <type_traits>
-#include <utility>
 #include <vector>
 
-// Base class for all layers
+struct CudaDeleter {
+  void operator()(float *ptr) const { cudaFree(ptr); }
+};
+
+using device_ptr = std::unique_ptr<float, CudaDeleter>;
 
 class Network {
 public:
-  // Main constructor: accepts arbitrary number of things
-  template <typename... Args> Network(Args &&...args) {
-    addLayers(std::forward<Args>(args)...);
+  Network(std::vector<std::unique_ptr<Layer>> &&layer_list)
+      : layers(std::move(layer_list)) {
+    // Allocate device memory for each layer's output
     for (auto &layer : layers) {
       float *d_out = nullptr;
       int num_outputs = layer->get_num_outputs();
       cuda_check(cudaMalloc(&d_out, num_outputs * sizeof(float)));
-      d_pointers.push_back(d_out);
+      d_pointers.emplace_back(device_ptr(d_out));
     }
   }
 
-  ~Network() {
-    for (auto ptr : d_pointers) {
-      cuda_check(cudaFree(ptr));
-    }
-  }
-  void forward(float *d_input_image) {}
+  // Prevent accidental copies
+  Network(const Network &) = delete;
+  Network &operator=(const Network &) = delete;
+
+  // Allow moves
+  Network(Network &&) = default;
+  Network &operator=(Network &&) = default;
+
+  ~Network() = default;
 
 private:
   std::vector<std::unique_ptr<Layer>> layers;
-  std::vector<float *> d_pointers;
-
-  // Base case for recursion
-  void addLayers() {}
-
-  // Overload for raw pointer to a Layer
-  template <typename T,
-            typename = std::enable_if_t<std::is_base_of<Layer, T>::value>>
-  void addLayers(T *ptr) {
-    layers.emplace_back(ptr); // take ownership
-  }
-
-  // Overload for derived Layer rvalues or lvalues (objects)
-  template <typename T, typename = std::enable_if_t<
-                            std::is_base_of<Layer, std::decay_t<T>>::value>>
-  void addLayers(T &&layer) {
-    layers.emplace_back(
-        std::make_unique<std::decay_t<T>>(std::forward<T>(layer)));
-  }
-
-  // Recursive case to handle multiple arguments
-  template <typename First, typename... Rest>
-  void addLayers(First &&first, Rest &&...rest) {
-    addLayers(std::forward<First>(first));
-    addLayers(std::forward<Rest>(rest)...);
-  }
+  std::vector<device_ptr> d_pointers;
 };

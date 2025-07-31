@@ -56,7 +56,7 @@ ConvLayer::~ConvLayer() {
 
 int ConvLayer::get_num_outputs() { return output_channels * hb * wb; }
 
-float *ConvLayer::forward(float *d_input_image, float *d_output_image) {
+void ConvLayer::forward(float *d_input_image, float *d_output_image) {
   int total_outputs = output_channels * hb * wb;
   int threads_per_block = 256;
   int num_blocks = (total_outputs + threads_per_block - 1) / threads_per_block;
@@ -72,7 +72,6 @@ float *ConvLayer::forward(float *d_input_image, float *d_output_image) {
   }
 
   cuda_check(cudaDeviceSynchronize());
-  return d_output_image;
 }
 
 void ConvLayer::relu(float *b) {
@@ -93,7 +92,9 @@ MaxPool::MaxPool(int ha, int wa, int hb, int wb, int input_channels)
 
 int MaxPool::get_num_outputs() { return input_channels * hb * wb; }
 
-float *MaxPool::forward(float *d_input, float *d_output, int *d_max_ind) {
+void MaxPool::forward(float *d_input, float *d_output){}
+
+void MaxPool::forward(float *d_input, float *d_output, int *d_max_ind) {
   int total_outputs = hb * wb * input_channels;
   int block_size = POOL_BLOCK_SIZE * POOL_BLOCK_SIZE;
   int grid_size = (total_outputs + block_size - 1) / block_size;
@@ -103,7 +104,6 @@ float *MaxPool::forward(float *d_input, float *d_output, int *d_max_ind) {
 
   cuda_check(cudaPeekAtLastError());
   cuda_check(cudaDeviceSynchronize());
-  return d_output;
 }
 
 // MlpLayer
@@ -163,7 +163,7 @@ MlpLayer::~MlpLayer() {
 
 int MlpLayer::get_num_outputs() { return output_size; }
 
-float *MlpLayer::forward(float *d_input, float *d_output) {
+void MlpLayer::forward(float *d_input, float *d_output) {
   const int block_size = 16;
   dim3 dim_block(BLOCK_SIZE * BLOCK_SIZE);
   int tiles_x = (output_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
@@ -178,7 +178,6 @@ float *MlpLayer::forward(float *d_input, float *d_output) {
   vec_add<<<(output_size + 255) / 256, 256>>>(d_output, d_bias, false,
                                               output_size);
   cuda_check(cudaDeviceSynchronize());
-  return d_output;
 }
 
 void MlpLayer::relu(float *d_input) {
@@ -280,14 +279,13 @@ void SoftmaxLayer::softmax(float *d_input, float *d_output) {
   softmax_kernel<<<grid_size, block_size>>>(d_input, d_output, output_size);
 }
 
-float SoftmaxLayer::compute_loss(float *d_y_hat, float *d_y) {
+void SoftmaxLayer::forward(float *d_y_hat, float *d_y) {
   cuda_check(cudaMemcpy(y_hat, d_y_hat, sizeof(float) * output_size,
                         cudaMemcpyDeviceToHost));
   cuda_check(
       cudaMemcpy(y, d_y, sizeof(float) * output_size, cudaMemcpyDeviceToHost));
   *h_loss = compute_cross_entropy_loss(y_hat, y, output_size);
   cudaMemcpy(d_loss, h_loss, sizeof(float), cudaMemcpyHostToDevice);
-  return *h_loss;
 }
 
 float *SoftmaxLayer::back_prop(float *d_y_hat, float *d_y, float alpha) {
@@ -298,4 +296,7 @@ float *SoftmaxLayer::back_prop(float *d_y_hat, float *d_y, float alpha) {
                                                   output_size);
   cuda_check(cudaDeviceSynchronize());
   return d_y_hat;
+}
+float SoftmaxLayer::get_loss(){
+  return *h_loss;
 }

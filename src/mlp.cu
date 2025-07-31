@@ -1,5 +1,6 @@
 #include "CudaChecks.cuh"
 #include "LayerClasses.cuh"
+#include "Network.cuh"
 #include "LoadData.h"
 #include <cstdint>
 #include <cstdio>
@@ -23,6 +24,12 @@ void saveToFile(const float *data, size_t size, const char *filename) {
   }
 }
 
+template <typename... Layers>
+std::vector<std::unique_ptr<Layer>> make_layer_vector(Layers&&... layers) {
+    std::vector<std::unique_ptr<Layer>> v;
+    (v.emplace_back(std::forward<Layers>(layers)), ...);  
+    return v;
+}
 int main(int argc, char *argv[]) {
   if (argc != 3) {
     fprintf(stderr, "Usage: <imageFile> <labelFile>\n");
@@ -56,10 +63,18 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  MlpLayer input_layer(input_layer_nodes, input_layer_nodes);
-  MlpLayer hidden_layer(input_layer_nodes, output_layer_nodes);
-  MlpLayer output_layer(hidden_layer_nodes, output_layer_nodes);
-  SoftmaxLayer softmax_layer(output_layer_nodes, output_layer_nodes);
+  // MlpLayer input_layer(input_layer_nodes, input_layer_nodes);
+  // MlpLayer hidden_layer(input_layer_nodes, hidden_layer_nodes);
+  // MlpLayer output_layer(hidden_layer_nodes, output_layer_nodes);
+  // SoftmaxLayer softmax_layer(output_layer_nodes, output_layer_nodes);
+
+Network mlp(make_layer_vector(
+  std::make_unique<MlpLayer>(input_layer_nodes, input_layer_nodes),
+  std::make_unique<MlpLayer>(input_layer_nodes, hidden_layer_nodes),
+  std::make_unique<MlpLayer>(hidden_layer_nodes, output_layer_nodes),
+  std::make_unique<SoftmaxLayer>(output_layer_nodes, output_layer_nodes)
+));
+
   float *input_image = getInputImage(normalized_images, 0);
   float *label_output;
   // init label_outputs

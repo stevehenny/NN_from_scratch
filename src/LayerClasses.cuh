@@ -17,6 +17,7 @@ class Layer {
 public:
   virtual ~Layer();
   virtual int get_num_outputs() = 0;
+  virtual void forward(float *d_input, float *d_output) = 0;
 };
 
 #endif
@@ -27,7 +28,7 @@ public:
             ImageSize kernel_size, uint8_t input_channels,
             uint8_t output_channels);
   ~ConvLayer();
-  float *forward(float *d_input_image, float *d_output_image);
+  void forward(float *d_input_image, float *d_output_image) override;
   int get_num_outputs() override;
   void relu(float *b);
 
@@ -47,8 +48,11 @@ private:
 class MaxPool : public Layer {
 public:
   MaxPool(int ha, int wa, int hb, int wb, int input_channels);
+  MaxPool(const MaxPool &) = delete;
+  MaxPool &operator=(const MaxPool &) = delete;
   int get_num_outputs() override;
-  float *forward(float *d_input, float *d_output, int *d_max_ind);
+  void forward(float *d_input, float *d_output) override;
+  void forward(float *d_input, float *d_output, int *d_max_ind);
   float *back_prop(float alpha);
 
 private:
@@ -61,8 +65,10 @@ class MlpLayer : public Layer {
 public:
   MlpLayer(int input_size, int output_size);
   ~MlpLayer();
+  MlpLayer(const MlpLayer &) = delete;
+  MlpLayer &operator=(const MlpLayer &) = delete;
   int get_num_outputs() override;
-  float *forward(float *d_input, float *d_output);
+  void forward(float *d_input, float *d_output) override;
   void relu(float *d_input);
   void compute_gradients(float *d_input, float *dl_dy);
   float *back_prop(float *d_input, float *dl_dy, float alpha);
@@ -91,10 +97,13 @@ class SoftmaxLayer : public Layer {
 public:
   SoftmaxLayer(int input_size, int output_size);
   ~SoftmaxLayer();
+  SoftmaxLayer(const SoftmaxLayer &) = delete;
+  SoftmaxLayer &operator=(const SoftmaxLayer &) = delete;
   int get_num_outputs() override;
   void softmax(float *d_input, float *d_output);
-  float compute_loss(float *d_y_hat, float *d_y);
+  void forward(float *d_y_hat, float *d_y) override;
   float *back_prop(float *d_y_hat, float *d_y, float alpha);
+  float get_loss();
 
 private:
   int input_size, output_size;
