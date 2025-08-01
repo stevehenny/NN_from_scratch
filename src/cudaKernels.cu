@@ -236,7 +236,6 @@ compute_cross_entropy_loss(float *d_output, float *d_target, int length) {
   for (int i = 0; i < length; ++i) {
     if (d_target[i] > 0) {
       loss = -logf(d_output[i] + 1e-8);
-      break;
     }
   }
   return loss;

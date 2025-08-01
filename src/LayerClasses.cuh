@@ -17,6 +17,7 @@ class Layer {
 public:
   virtual ~Layer();
   virtual int get_num_outputs() = 0;
+  virtual int get_num_inputs() = 0;
   virtual void forward(float *d_input, float *d_output) = 0;
   virtual void back_prop(float *d_input, float *d_grad_output, float alpha) = 0;
 };
@@ -32,6 +33,7 @@ public:
   void forward(float *d_input_image, float *d_output_image) override;
   void back_prop(float *d_input, float *d_grad_output, float alpha) override;
   int get_num_outputs() override;
+  int get_num_inputs() override;
   void relu(float *b);
 
 private:
@@ -53,6 +55,7 @@ public:
   MaxPool(const MaxPool &) = delete;
   MaxPool &operator=(const MaxPool &) = delete;
   int get_num_outputs() override;
+  int get_num_inputs() override;
   void forward(float *d_input, float *d_output) override;
   void forward(float *d_input, float *d_output, int *d_max_ind);
   void back_prop(float *d_input, float *d_grad_output, float alpha) override;
@@ -70,6 +73,7 @@ public:
   MlpLayer(const MlpLayer &) = delete;
   MlpLayer &operator=(const MlpLayer &) = delete;
   int get_num_outputs() override;
+  int get_num_inputs() override;
   void forward(float *d_input, float *d_output) override;
   void relu(float *d_input);
   void compute_gradients(float *d_input, float *dl_dy);
@@ -102,6 +106,7 @@ public:
   SoftmaxLayer(const SoftmaxLayer &) = delete;
   SoftmaxLayer &operator=(const SoftmaxLayer &) = delete;
   int get_num_outputs() override;
+  int get_num_inputs() override;
   void softmax(float *d_input, float *d_output);
   void forward(float *d_y_hat, float *d_y) override;
   void back_prop(float *d_y_hat, float *d_y, float alpha) override;

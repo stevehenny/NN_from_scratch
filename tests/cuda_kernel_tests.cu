@@ -1,6 +1,6 @@
-#include <CudaChecks.cuh>
 #include <LayerClasses.cuh>
 #include <algorithm>
+#include <cudaClasses.cuh>
 #include <cudaKernels.cuh>
 #include <gtest/gtest.h>
 #include <numeric>

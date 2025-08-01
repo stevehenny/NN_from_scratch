@@ -1,6 +1,13 @@
 #ifndef CUDA_CHECK_H
 #define CUDA_CHECK_H
 #include <iostream>
+#include <memory>
+
+struct CudaDeleter {
+  void operator()(float *ptr) const { cudaFree(ptr); }
+};
+
+using device_ptr = std::unique_ptr<float, CudaDeleter>;
 
 #define cuda_check(stmt)                                                       \
   do {                                                                         \

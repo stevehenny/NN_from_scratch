@@ -1,5 +1,5 @@
-#include "CudaChecks.cuh"
 #include "LayerClasses.cuh"
+#include "cudaClasses.cuh"
 #include "cudaKernels.cuh"
 #include <cstdlib>
 #include <iostream>
@@ -55,6 +55,7 @@ ConvLayer::~ConvLayer() {
 }
 
 int ConvLayer::get_num_outputs() { return output_channels * hb * wb; }
+int ConvLayer::get_num_inputs() { return input_channels * ha * wa; }
 
 void ConvLayer::forward(float *d_input_image, float *d_output_image) {
   int total_outputs = output_channels * hb * wb;
@@ -74,9 +75,10 @@ void ConvLayer::forward(float *d_input_image, float *d_output_image) {
   cuda_check(cudaDeviceSynchronize());
 }
 
-//TODO: Define this back_prop method. This is a place holder override for the Layer 
-// virtual method
-void ConvLayer::back_prop(float *d_input, float *d_grad_output, float alpha){}
+// TODO: Define this back_prop method. This is a place holder override for the
+// Layer
+//  virtual method
+void ConvLayer::back_prop(float *d_input, float *d_grad_output, float alpha) {}
 
 void ConvLayer::relu(float *b) {
   int total_elements = output_channels * wb * hb;
@@ -95,8 +97,9 @@ MaxPool::MaxPool(int ha, int wa, int hb, int wb, int input_channels)
     : ha(ha), wa(wa), hb(hb), wb(wb), input_channels(input_channels) {}
 
 int MaxPool::get_num_outputs() { return input_channels * hb * wb; }
+int MaxPool::get_num_inputs() { return input_channels * ha * wa; }
 
-void MaxPool::forward(float *d_input, float *d_output){}
+void MaxPool::forward(float *d_input, float *d_output) {}
 
 void MaxPool::forward(float *d_input, float *d_output, int *d_max_ind) {
   int total_outputs = hb * wb * input_channels;
@@ -110,9 +113,8 @@ void MaxPool::forward(float *d_input, float *d_output, int *d_max_ind) {
   cuda_check(cudaDeviceSynchronize());
 }
 
-
 // TODO Define this method for conv layers
-void MaxPool::back_prop(float *d_input, float *d_grad_output, float alpha){}
+void MaxPool::back_prop(float *d_input, float *d_grad_output, float alpha) {}
 
 // MlpLayer
 
@@ -170,6 +172,7 @@ MlpLayer::~MlpLayer() {
 }
 
 int MlpLayer::get_num_outputs() { return output_size; }
+int MlpLayer::get_num_inputs() { return input_size; }
 
 void MlpLayer::forward(float *d_input, float *d_output) {
   const int block_size = 16;
@@ -249,6 +252,11 @@ void MlpLayer::back_prop(float *d_input, float *dl_dy, float alpha) {
   cuda_check(cudaDeviceSynchronize());
 
   // return dl_dx;
+  // FIXME: this is a temporary fix. cuda copying dl_dx into float *d_input
+  // come up with a more graceful solution. This might become more aparent
+  // once you start using tensors
+  cuda_check(cudaMemcpy(d_input, dl_dx, sizeof(float) * input_size,
+                        cudaMemcpyDeviceToDevice));
 }
 
 float *MlpLayer::get_host_weights() { return weights; }
@@ -280,6 +288,7 @@ SoftmaxLayer::~SoftmaxLayer() {
 }
 
 int SoftmaxLayer::get_num_outputs() { return output_size; }
+int SoftmaxLayer::get_num_inputs() { return input_size; }
 
 void SoftmaxLayer::softmax(float *d_input, float *d_output) {
   int block_size = 128;
@@ -298,12 +307,11 @@ void SoftmaxLayer::forward(float *d_y_hat, float *d_y) {
 
 void SoftmaxLayer::back_prop(float *d_y_hat, float *d_y, float alpha) {
   int threads_per_block = 256;
+  bool neg = true;
   int blocks_per_grid =
       (output_size + threads_per_block - 1) / threads_per_block;
-  vec_add<<<blocks_per_grid, threads_per_block>>>(d_y_hat, d_y, true,
+  vec_add<<<blocks_per_grid, threads_per_block>>>(d_y_hat, d_y, neg,
                                                   output_size);
   cuda_check(cudaDeviceSynchronize());
 }
-float SoftmaxLayer::get_loss(){
-  return *h_loss;
-}
+float SoftmaxLayer::get_loss() { return *h_loss; }
