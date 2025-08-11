@@ -16,7 +16,7 @@ public:
 
   ~Network() = default;
 
-  void forward(float *d_input, int label_num);
+  void forward(float *d_input, int label_num, int batch_size);
   void back_prop();
   float get_loss();
   float *get_label(int label_num);
@@ -29,4 +29,5 @@ private:
   std::vector<device_ptr> d_pointers_backprop;
   float *cur_label;
   float learning_rate;
+  float *d_initial_input = nullptr;
 };

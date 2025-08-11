@@ -155,25 +155,25 @@ int main(int argc, char *argv[]) {
                         sizeof(float) * output_layer_nodes,
                         cudaMemcpyHostToDevice));
   // Run forward pass
-  layer1.forward(d_input_image, d_output_conv1);
-  layer1.relu(d_output_conv1);
+  layer1.forward(d_input_image, d_output_conv1, 1);
+  layer1.relu(d_output_conv1, 1);
 
-  poolLayer1.forward(d_output_conv1, d_output_pool1, d_max_ind_pool2);
-  layer2.forward(d_output_pool1, d_output_conv2);
-  layer2.relu(d_output_conv2);
-  pool2.forward(d_output_conv2, d_output_pool2, d_max_ind_pool2);
-  hidden_layer.forward(d_output_pool2, d_hidden_layer);
+  poolLayer1.forward(d_output_conv1, d_output_pool1, d_max_ind_pool2, 1);
+  layer2.forward(d_output_pool1, d_output_conv2, 1);
+  layer2.relu(d_output_conv2, 1);
+  pool2.forward(d_output_conv2, d_output_pool2, d_max_ind_pool2, 1);
+  hidden_layer.forward(d_output_pool2, d_hidden_layer, 1);
   cuda_check(cudaMemcpy(relu_before, d_hidden_layer,
                         hidden_layer_nodes * sizeof(float),
                         cudaMemcpyDeviceToHost));
-  hidden_layer.relu(d_hidden_layer);
+  hidden_layer.relu(d_hidden_layer, 1);
 
   cuda_check(cudaMemcpy(relu_after, d_hidden_layer,
                         hidden_layer_nodes * sizeof(float),
                         cudaMemcpyDeviceToHost));
-  output_layer.forward(d_hidden_layer, d_output_layer);
-  softmax_layer.softmax(d_output_layer, d_softmax);
-  softmax_layer.forward(d_softmax, d_label_output);
+  output_layer.forward(d_hidden_layer, d_output_layer, 1);
+  softmax_layer.softmax(d_output_layer, d_softmax, 1);
+  softmax_layer.forward(d_softmax, d_label_output, 1);
 
   // copy back to host
   cuda_check(cudaMemcpy(output_image, d_output_conv1,

@@ -2,11 +2,11 @@
 #include "LoadData.h"
 #include "Network.cuh"
 #include "cudaClasses.cuh"
-#include "gmock/gmock.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <iostream>
+#include <memory>
 #include <stdlib.h>
 
 #define INPUT_IMAGE_ROWS 28
@@ -56,7 +56,7 @@ int main(int argc, char *argv[]) {
   const int hidden_layer_nodes = 100;
   const int output_layer_nodes = 10;
   const int batch_size = 1;
-  const int num_epochs = 5;
+  const int num_epochs = 10;
 
   // Load MNIST
   uint8_t *images = loadMNISTImages(imageFile, numImages, rows, cols);
@@ -96,10 +96,6 @@ int main(int argc, char *argv[]) {
       cuda_check(cudaMemcpy(d_labels, label_output,
                             numImages * output_layer_nodes * sizeof(float),
                             cudaMemcpyHostToDevice)));
-  // MlpLayer input_layer(input_layer_nodes, input_layer_nodes);
-  // MlpLayer hidden_layer(input_layer_nodes, hidden_layer_nodes);
-  // MlpLayer output_layer(hidden_layer_nodes, output_layer_nodes);
-  // SoftmaxLayer softmax_layer(output_layer_nodes, output_layer_nodes);
 
   Network mlp(
       make_layer_vector(
@@ -107,7 +103,7 @@ int main(int argc, char *argv[]) {
           std::make_unique<MlpLayer>(input_layer_nodes, hidden_layer_nodes),
           std::make_unique<MlpLayer>(hidden_layer_nodes, output_layer_nodes)),
       std::make_unique<SoftmaxLayer>(output_layer_nodes, output_layer_nodes),
-      device_ptr(d_labels), 0.1f);
+      device_ptr(d_labels), 0.001f);
   // Print results
   printf("Label: %d\n", labels[0]);
   printImage(input_image, rows, cols);
@@ -131,7 +127,7 @@ int main(int argc, char *argv[]) {
                      cudaMemcpyHostToDevice));
 
       // forward pass
-      mlp.forward(d_input_batch, i);
+      mlp.forward(d_input_batch, i, batch_size);
       total_loss += mlp.get_loss();
 
       mlp.back_prop();
@@ -140,7 +136,7 @@ int main(int argc, char *argv[]) {
               << (total_loss / (static_cast<float>(numImages) / batch_size))
               << "\n";
   }
-  mlp.forward(d_input_image, 0);
+  // mlp.forward(d_input_image, 0);
   std::cout << "Loss: " << mlp.get_loss() << "\n";
   int length = 10;
   mlp.back_prop();

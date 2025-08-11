@@ -182,13 +182,13 @@ TEST(CudaKernelTests, test_mlp_layer_compute_gradients_and_backprop) {
   std::vector<float> h_dL_dW(input_size * output_size);
   std::vector<float> h_dL_db(output_size);
   std::vector<float> h_dL_dx(input_size);
-
+  layer.back_prop(d_input, d_dL_dy, 0.01f);
   cuda_check(cudaMemcpy(h_dL_dW.data(), layer.get_weight_grad(),
                         input_size * output_size * sizeof(float),
                         cudaMemcpyDeviceToHost));
   cuda_check(cudaMemcpy(h_dL_db.data(), layer.get_bias_grad(),
                         output_size * sizeof(float), cudaMemcpyDeviceToHost));
-  cuda_check(cudaMemcpy(h_dL_dx.data(), layer.back_prop(d_input, d_dL_dy, 0.1f),
+  cuda_check(cudaMemcpy(h_dL_dx.data(), layer.get_input_grad(),
                         input_size * sizeof(float), cudaMemcpyDeviceToHost));
 
   for (float v : h_dL_db) {

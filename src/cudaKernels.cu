@@ -114,7 +114,7 @@ __global__ void max_pool2d(float *a, float *b, int ha, int wa, int hb, int wb,
 
 __global__ void relu_kernel(float *b, int hb, int wb, int channels) {
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
-  int total_elements = hb * wb * channels;
+  int total_elements = hb * wb * channels * blockIdx.z;
 
   if (tid >= total_elements)
     return;
@@ -170,12 +170,13 @@ __global__ void sgemm(float *a, float *b, float *c, int ha, int wa, int hb,
   }
 }
 
-__global__ void vec_add(float *a_vec, float *b_vec, bool neg, int len) {
+__global__ void vec_add(float *a_vec, float *b_vec, float *output_vec, bool neg,
+                        int len) {
   int sign = neg ? -1 : 1;
   int i = blockIdx.x * blockDim.x + threadIdx.x;
 
   if (i < len)
-    a_vec[i] += (b_vec[i] * sign);
+    output_vec[i] = a_vec[i] + (b_vec[i] * sign);
 }
 
 __global__ void mat_add(float *a, float *b, float *c, int rows, int cols,
@@ -184,10 +185,9 @@ __global__ void mat_add(float *a, float *b, float *c, int rows, int cols,
   int col = blockIdx.x * blockDim.x + threadIdx.x;
 
   int idx = row * cols + col;
-  float sign = neg ? -1.0 : 1.0;
 
   if (row < rows && col < cols) {
-    c[idx] = a[idx] + (b[idx] * sign * alpha);
+    c[idx] = a[idx] + (neg ? -alpha : alpha) * b[idx];
   }
 }
 
@@ -230,13 +230,13 @@ __global__ void softmax_kernel(const float *input, float *output, int len) {
   }
 }
 
-__device__ __host__ float
-compute_cross_entropy_loss(float *d_output, float *d_target, int length) {
+__device__ __host__ float compute_cross_entropy_loss(float *y_hat, float *y,
+                                                     int length) {
   float loss = 0.0f;
+  const float eps = 1e-8f;
   for (int i = 0; i < length; ++i) {
-    if (d_target[i] > 0) {
-      loss = -logf(d_output[i] + 1e-8);
-    }
+    if (y[i] > 0.0f)
+      loss -= y[i] * logf(y_hat[i] + eps);
   }
   return loss;
 }

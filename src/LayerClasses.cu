@@ -57,7 +57,8 @@ ConvLayer::~ConvLayer() {
 int ConvLayer::get_num_outputs() { return output_channels * hb * wb; }
 int ConvLayer::get_num_inputs() { return input_channels * ha * wa; }
 
-void ConvLayer::forward(float *d_input_image, float *d_output_image) {
+void ConvLayer::forward(float *d_input_image, float *d_output_image,
+                        int batch_size) {
   int total_outputs = output_channels * hb * wb;
   int threads_per_block = 256;
   int num_blocks = (total_outputs + threads_per_block - 1) / threads_per_block;
@@ -80,7 +81,7 @@ void ConvLayer::forward(float *d_input_image, float *d_output_image) {
 //  virtual method
 void ConvLayer::back_prop(float *d_input, float *d_grad_output, float alpha) {}
 
-void ConvLayer::relu(float *b) {
+void ConvLayer::relu(float *b, int batch_size) {
   int total_elements = output_channels * wb * hb;
   int threads_per_block = 256;
   int blocks_per_grid =
@@ -91,6 +92,7 @@ void ConvLayer::relu(float *b) {
   cuda_check(cudaDeviceSynchronize());
 }
 
+float *ConvLayer::get_input_grad() { return dl_dx; }
 // MaxPool
 
 MaxPool::MaxPool(int ha, int wa, int hb, int wb, int input_channels)
@@ -99,9 +101,10 @@ MaxPool::MaxPool(int ha, int wa, int hb, int wb, int input_channels)
 int MaxPool::get_num_outputs() { return input_channels * hb * wb; }
 int MaxPool::get_num_inputs() { return input_channels * ha * wa; }
 
-void MaxPool::forward(float *d_input, float *d_output) {}
+void MaxPool::forward(float *d_input, float *d_output, int batch_size) {}
 
-void MaxPool::forward(float *d_input, float *d_output, int *d_max_ind) {
+void MaxPool::forward(float *d_input, float *d_output, int *d_max_ind,
+                      int batch_size) {
   int total_outputs = hb * wb * input_channels;
   int block_size = POOL_BLOCK_SIZE * POOL_BLOCK_SIZE;
   int grid_size = (total_outputs + block_size - 1) / block_size;
@@ -115,6 +118,8 @@ void MaxPool::forward(float *d_input, float *d_output, int *d_max_ind) {
 
 // TODO Define this method for conv layers
 void MaxPool::back_prop(float *d_input, float *d_grad_output, float alpha) {}
+
+float *MaxPool::get_input_grad() { return dl_dx; }
 
 // MlpLayer
 
@@ -174,28 +179,36 @@ MlpLayer::~MlpLayer() {
 int MlpLayer::get_num_outputs() { return output_size; }
 int MlpLayer::get_num_inputs() { return input_size; }
 
-void MlpLayer::forward(float *d_input, float *d_output) {
+void MlpLayer::forward(float *d_input, float *d_output, int batch_size) {
   const int block_size = 16;
   dim3 dim_block(BLOCK_SIZE * BLOCK_SIZE);
   int tiles_x = (output_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-  int tiles_y = (1 + BLOCK_SIZE - 1) / BLOCK_SIZE;
-  dim3 dim_grid(tiles_x * tiles_y);
+  int tiles_y = 1;
+  dim3 dim_grid(tiles_x * tiles_y, 1, batch_size);
 
   sgemm_1d<block_size><<<dim_grid, dim_block>>>(d_input, d_weights, d_output, 1,
                                                 input_size, input_size,
                                                 output_size, 1, output_size);
   cudaDeviceSynchronize();
 
-  vec_add<<<(output_size + 255) / 256, 256>>>(d_output, d_bias, false,
+  vec_add<<<(output_size + 255) / 256, 256>>>(d_output, d_bias, d_output, false,
                                               output_size);
   cuda_check(cudaDeviceSynchronize());
+  relu(d_output, batch_size);
 }
 
-void MlpLayer::relu(float *d_input) {
+void MlpLayer::relu(float *d_input, int batch_size) {
   int threads_per_block = 256;
+  int total_elements = 1 * output_size * 1 * batch_size;
+
   int blocks_per_grid =
-      (input_size + threads_per_block - 1) / threads_per_block;
-  relu_kernel<<<blocks_per_grid, threads_per_block>>>(d_input, input_size);
+      (total_elements + threads_per_block - 1) / threads_per_block;
+
+  relu_kernel<<<blocks_per_grid, threads_per_block>>>(d_input,
+                                                      1,           // hb
+                                                      output_size, // wb
+                                                      1            // channels
+  );
   cuda_check(cudaDeviceSynchronize());
 }
 
@@ -204,26 +217,29 @@ void MlpLayer::compute_gradients(float *d_input, float *dl_dy) {
   int blocks_per_grid =
       (output_size + threads_per_block - 1) / threads_per_block;
 
-  relu_backward<<<blocks_per_grid, threads_per_block>>>(d_input, dy_dz, dl_dy,
-                                                        output_size);
+  // 1) Compute dl_dz = dl_dy * relu'(z)  (relu_backward applies mask)
+  relu_backward<<<blocks_per_grid, threads_per_block>>>(
+      d_input, // input (used to compute mask input>0)
+      dl_dy,   // grad_output = upstream gradient
+      dl_dz,   // grad_input = result dl_dz
+      output_size);
   cuda_check(cudaDeviceSynchronize());
 
-  tensor_elementwise_mult<<<blocks_per_grid, threads_per_block>>>(
-      dl_dy, dy_dz, dl_dz, output_size);
-  cuda_check(cudaDeviceSynchronize());
-
+  // 2) Compute weight gradients: dl_dw = input^T * dl_dz
   constexpr int block_size = 16;
   threads_per_block = 256;
   blocks_per_grid =
       (input_size * output_size + threads_per_block - 1) / threads_per_block;
   sgemm_1d<block_size><<<blocks_per_grid, threads_per_block>>>(
-      d_input, dl_dz, dl_dw, input_size, 1, 1, output_size, input_size,
-      output_size);
+      d_input, dl_dz, dl_dw, // A = input, B = dl_dz, C = dl_dw
+      input_size, 1, 1, output_size, input_size, output_size);
   cuda_check(cudaDeviceSynchronize());
 
+  // 3) Copy bias grads (dl_db = dl_dz)
   cuda_check(cudaMemcpy(dl_db, dl_dz, output_size * sizeof(float),
                         cudaMemcpyDeviceToDevice));
 
+  // 4) Transpose weights and compute input gradient dl_dx = dl_dz * W^T
   transpose_kernel<<<blocks_per_grid, threads_per_block>>>(
       d_weights, d_weights_transpose, input_size, output_size);
   cuda_check(cudaDeviceSynchronize());
@@ -278,6 +294,7 @@ SoftmaxLayer::SoftmaxLayer(int input_size, int output_size)
   cuda_check(
       cudaHostAlloc(&y, sizeof(float) * output_size, cudaHostAllocDefault));
   cuda_check(cudaMalloc(&d_loss, sizeof(float)));
+  cuda_check(cudaMalloc(&dl_dx, input_size * sizeof(float)));
 }
 
 SoftmaxLayer::~SoftmaxLayer() {
@@ -285,18 +302,19 @@ SoftmaxLayer::~SoftmaxLayer() {
   cuda_check(cudaFreeHost(y_hat));
   cuda_check(cudaFreeHost(y));
   cuda_check(cudaFree(d_loss));
+  cuda_check(cudaFree(dl_dx));
 }
 
 int SoftmaxLayer::get_num_outputs() { return output_size; }
 int SoftmaxLayer::get_num_inputs() { return input_size; }
 
-void SoftmaxLayer::softmax(float *d_input, float *d_output) {
+void SoftmaxLayer::softmax(float *d_input, float *d_output, int batch_size) {
   int block_size = 128;
   int grid_size = (output_size + block_size - 1) / block_size;
   softmax_kernel<<<grid_size, block_size>>>(d_input, d_output, output_size);
 }
 
-void SoftmaxLayer::forward(float *d_y_hat, float *d_y) {
+void SoftmaxLayer::forward(float *d_y_hat, float *d_y, int batch_size) {
   cuda_check(cudaMemcpy(y_hat, d_y_hat, sizeof(float) * output_size,
                         cudaMemcpyDeviceToHost));
   cuda_check(
@@ -306,12 +324,16 @@ void SoftmaxLayer::forward(float *d_y_hat, float *d_y) {
 }
 
 void SoftmaxLayer::back_prop(float *d_y_hat, float *d_y, float alpha) {
+  // d_y_hat: device softmax output (probabilities) d_y: device one-hot label
+  // dl_dx: device gradient buffer already allocated in ctor
+
+  // Compute grad = d_y_hat - d_y into dl_dx
   int threads_per_block = 256;
-  bool neg = true;
-  int blocks_per_grid =
-      (output_size + threads_per_block - 1) / threads_per_block;
-  vec_add<<<blocks_per_grid, threads_per_block>>>(d_y_hat, d_y, neg,
-                                                  output_size);
+  int blocks = (output_size + threads_per_block - 1) / threads_per_block;
+  softmax_cross_entropy_backward<<<blocks, threads_per_block>>>(
+      d_y_hat, d_y, dl_dx, output_size);
   cuda_check(cudaDeviceSynchronize());
 }
 float SoftmaxLayer::get_loss() { return *h_loss; }
+
+float *SoftmaxLayer::get_input_grad() { return dl_dx; }

@@ -29,41 +29,51 @@ __global__ void sgemm(float *a, float *b, float *c, int ha, int wa, int hb,
 template <const int block_size>
 __global__ void sgemm_1d(float *A, float *B, float *C, int HA, int WA, int HB,
                          int WB, int HC, int WC) {
-  // Shared memory as flat arrays
   __shared__ float ds_A[block_size * block_size];
   __shared__ float ds_B[block_size * block_size];
 
-  // 1D thread and block index
+  // Thread & block index
   int thread_id = threadIdx.x;
   int block_id = blockIdx.x;
 
-  // Map 1D thread index to 2D within the tile
+  // Map 1D thread index to 2D position in tile
   int tx = thread_id % block_size;
   int ty = thread_id / block_size;
 
-  // Determine global output row and col
-  int Col = (block_id % ((WC + block_size - 1) / block_size)) * block_size + tx;
-  int Row = (block_id / ((WC + block_size - 1) / block_size)) * block_size + ty;
+  // Grid tile indexing
+  int tiles_per_row = (WC + block_size - 1) / block_size;
+  int Col = (block_id % tiles_per_row) * block_size + tx;
+  int Row = (block_id / tiles_per_row) * block_size + ty;
+
+  // --- Batch offset ---
+  int batch_id = blockIdx.z; // z dimension is batch index
+  size_t A_batch_offset = batch_id * (HA * WA);
+  size_t B_batch_offset = batch_id * (HB * WB);
+  size_t C_batch_offset = batch_id * (HC * WC);
 
   float Pvalue = 0.0f;
 
+  // Loop over tiles
   for (int p = 0; p < (WA + block_size - 1) / block_size; p++) {
     // Load A tile
     if (Row < HA && (p * block_size + tx) < WA) {
-      ds_A[ty * block_size + tx] = A[Row * WA + (p * block_size + tx)];
+      ds_A[ty * block_size + tx] =
+          A[A_batch_offset + Row * WA + (p * block_size + tx)];
     } else {
       ds_A[ty * block_size + tx] = 0.0f;
     }
 
     // Load B tile
     if ((p * block_size + ty) < HB && Col < WB) {
-      ds_B[ty * block_size + tx] = B[(p * block_size + ty) * WB + Col];
+      ds_B[ty * block_size + tx] =
+          B[B_batch_offset + (p * block_size + ty) * WB + Col];
     } else {
       ds_B[ty * block_size + tx] = 0.0f;
     }
 
     __syncthreads();
 
+    // Multiply and accumulate
     for (int i = 0; i < block_size; i++) {
       Pvalue += ds_A[ty * block_size + i] * ds_B[i * block_size + tx];
     }
@@ -71,12 +81,14 @@ __global__ void sgemm_1d(float *A, float *B, float *C, int HA, int WA, int HB,
     __syncthreads();
   }
 
+  // Write result
   if (Row < HC && Col < WC) {
-    C[Row * WC + Col] = Pvalue;
+    C[C_batch_offset + Row * WC + Col] = Pvalue;
   }
 }
 
-__global__ void vec_add(float *a_vec, float *b_vec, bool neg, int len);
+__global__ void vec_add(float *a_vec, float *b_vec, float *c_vec, bool neg,
+                        int len);
 
 __global__ void mat_add(float *a, float *b, float *c, int rows, int cols,
                         bool neg, float alpha);
