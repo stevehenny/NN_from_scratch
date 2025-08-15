@@ -53,7 +53,7 @@ int main(int argc, char *argv[]) {
   const int imageSize = rows * cols;
 
   const int input_layer_nodes = imageSize;
-  const int hidden_layer_nodes = 100;
+  const int hidden_layer_nodes = 10;
   const int output_layer_nodes = 10;
   const int batch_size = 1;
   const int num_epochs = 10;
