@@ -174,8 +174,8 @@ TEST(CudaKernelTests, test_mlp_layer_compute_gradients_and_backprop) {
 
   float *d_output;
   cuda_check(cudaMalloc(&d_output, output_size * sizeof(float)));
-  layer.forward(d_input, d_output);
-  layer.relu(d_output);
+  layer.forward(d_input, d_output, 1);
+  layer.relu(d_output, 1);
 
   layer.compute_gradients(d_input, d_dL_dy);
 
@@ -208,7 +208,7 @@ TEST(CudaKernelTests, test_mlp_layer_compute_gradients_and_backprop) {
                         output_size * sizeof(float), cudaMemcpyDeviceToHost));
 
   for (int i = 0; i < output_size; ++i) {
-    float expected = layer.get_host_bias()[i] - 0.1f * h_dL_db[i];
+    float expected = layer.get_host_bias()[i] - 0.01f * h_dL_db[i];
     EXPECT_NEAR(h_bias_updated[i], expected, 1e-3)
         << "Mismatch in updated bias at " << i;
   }
