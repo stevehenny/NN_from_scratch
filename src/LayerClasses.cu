@@ -156,6 +156,9 @@ MlpLayer::MlpLayer(int input_size, int output_size)
   cuda_check(cudaMalloc((void **)&d_weights_transpose,
                         input_size * output_size * sizeof(float)));
 
+  cuda_check(cudaMalloc((void **)&d_pre_activtion_tensor,
+                        output_size * sizeof(float)));
+
   cuda_check(cudaMemcpy(d_bias, bias, output_size * sizeof(float),
                         cudaMemcpyHostToDevice));
   cuda_check(cudaMemcpy(d_weights, weights,
@@ -194,6 +197,10 @@ void MlpLayer::forward(float *d_input, float *d_output, int batch_size) {
   vec_add<<<(output_size + 255) / 256, 256>>>(d_output, d_bias, d_output, false,
                                               output_size);
   cuda_check(cudaDeviceSynchronize());
+
+  // cache pre activation vector
+  cuda_check(cudaMemcpy(d_pre_activtion_tensor, d_output,
+                        sizeof(float) * output_size, cudaMemcpyDeviceToDevice));
   relu(d_output, batch_size);
 }
 
@@ -219,9 +226,9 @@ void MlpLayer::compute_gradients(float *d_input, float *dl_dy) {
 
   // 1) Compute dl_dz = dl_dy * relu'(z)  (relu_backward applies mask)
   relu_backward<<<blocks_per_grid, threads_per_block>>>(
-      d_input, // input (used to compute mask input>0)
-      dl_dy,   // grad_output = upstream gradient
-      dl_dz,   // grad_input = result dl_dz
+      d_pre_activtion_tensor, // input (used to compute mask input>0)
+      dl_dy,                  // grad_output = upstream gradient
+      dl_dz,                  // grad_input = result dl_dz
       output_size);
   cuda_check(cudaDeviceSynchronize());
 
@@ -255,19 +262,21 @@ void MlpLayer::back_prop(float *d_input, float *dl_dy, float alpha) {
   compute_gradients(d_input, dl_dy);
   bool neg = true;
 
-  int threads_per_block = 256;
-  int blocks_per_grid =
-      (output_size * input_size + threads_per_block - 1) / threads_per_block;
-  mat_add<<<blocks_per_grid, threads_per_block>>>(
-      d_weights, dl_dw, d_weights, input_size, output_size, neg, alpha);
+  dim3 threadsPerBlock(16, 16);
+  dim3 numBlocks((output_size + threadsPerBlock.x - 1) / threadsPerBlock.x,
+                 (input_size + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+  mat_add<<<numBlocks, threadsPerBlock>>>(d_weights, dl_dw, d_weights,
+                                          input_size, output_size, neg, alpha);
   cuda_check(cudaDeviceSynchronize());
 
+  int threads_per_block = 256;
+  int blocks_per_grid;
   blocks_per_grid = (output_size + threads_per_block - 1) / threads_per_block;
   mat_add<<<blocks_per_grid, threads_per_block>>>(d_bias, dl_db, d_bias, 1,
                                                   output_size, neg, alpha);
   cuda_check(cudaDeviceSynchronize());
 
-  // return dl_dx;
   // FIXME: this is a temporary fix. cuda copying dl_dx into float *d_input
   // come up with a more graceful solution. This might become more aparent
   // once you start using tensors

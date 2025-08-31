@@ -99,6 +99,7 @@ private:
   float *bias, *d_bias;
   float *weights, *d_weights;
   float *d_weights_transpose;
+  float *d_pre_activtion_tensor;
   float *dl_dw;
   float *dl_db;
   float *dl_dx;
