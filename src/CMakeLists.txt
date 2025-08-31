@@ -2,7 +2,7 @@
 add_library(LoadData STATIC LoadData.cpp)
 
 add_library(Layers STATIC
-  LayerClasses.cu
+  LayerClasses.cu Network.cu
 )
 
 add_library(CudaKernels STATIC cudaKernels.cu)
@@ -14,6 +14,9 @@ set_target_properties(Layers PROPERTIES CUDA_STANDARD 17)
 
 add_executable(main main.cu )
 target_link_libraries(main PRIVATE Layers CudaKernels LoadData)
+
+add_executable(mlp mlp.cu)
+target_link_libraries(mlp PRIVATE Layers CudaKernels LoadData)
 
 # Set CUDA compilation properties
 set_target_properties(main PROPERTIES 

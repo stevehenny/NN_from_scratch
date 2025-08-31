@@ -1,21 +1,33 @@
-#ifndef NETWORK_H
-#define NETWORK_H
+#pragma once
+#include "LayerClasses.cuh"
+#include "cudaClasses.cuh"
+#include <memory>
+#include <vector>
 
-#include <cstdint>
-#include <sys/types.h>
 class Network {
 public:
-  Network(int depth, int height, int width, int layer1_filters,
-          int layer2_filters, int layer3_filters, int filter_size,
-          int batch_size = 64);
-  ~Network();
+  Network(std::vector<std::unique_ptr<Layer>> &&layer_list,
+          std::unique_ptr<SoftmaxLayer> &&softmax_layer, device_ptr &&d_labels,
+          float learning_rate);
+  // Prevent accidental copies:
+  // copies will copy pointers and those pointers will be double freed
+  Network(const Network &) = delete;
+  Network &operator=(const Network &) = delete;
+
+  ~Network() = default;
+
+  void forward(float *d_input, int label_num, int batch_size);
+  void back_prop();
+  float get_loss();
+  float *get_label(int label_num);
 
 private:
-  int depth, height, width, layer1_filters, layer2_filters, layer3_filters,
-      filter_size, batch_size;
-
-  uint8_t *layer1_channels; //  (height, width, depth)
-  uint8_t *layer2_channels; //  (height, width, depth)
+  std::vector<std::unique_ptr<Layer>> layers;
+  std::unique_ptr<SoftmaxLayer> softmax_layer;
+  device_ptr d_labels;
+  std::vector<device_ptr> d_pointers_forward;
+  std::vector<device_ptr> d_pointers_backprop;
+  float *cur_label;
+  float learning_rate;
+  float *d_initial_input = nullptr;
 };
-
-#endif // NETWORK_H
